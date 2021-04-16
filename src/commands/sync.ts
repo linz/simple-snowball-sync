@@ -6,7 +6,7 @@ import pLimit from "p-limit";
 import * as path from "path";
 import S3 from 'aws-sdk/clients/s3';
 
-let client:S3; // = new S3();
+let client: S3;
 
 function headObject(ctx: { Bucket: string, Key: string }): Promise<S3.HeadObjectOutput | false> {
   return client.headObject(ctx).promise().catch(e => {
@@ -62,7 +62,7 @@ async function findMostRecentUpload(mani: Manifest, bucket: string, prefix: stri
 export class SnowballSync extends Command {
   static flags = {
     target: flags.string({ description: 's3 location to store files' }),
-    endpoint: flags.string({description: 'snowball endpoint', required: true}),
+    endpoint: flags.string({ description: 'snowball endpoint', required: true }),
     concurrency: flags.integer({ description: 'Number of upload threads to run', default: 5 }),
     verbose: flags.boolean({ description: 'verbose logging' }),
     limit: flags.integer({ description: 'Only ingest this many files' }),
@@ -81,8 +81,8 @@ export class SnowballSync extends Command {
 
     let endpoint = flags.endpoint;
     if (!endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
-    logger.info({endpoint}, 'SettingS3 Endpoint')
-    client = new S3({ endpoint})
+    logger.info({ endpoint }, 'SettingS3 Endpoint')
+    client = new S3({ endpoint, s3ForcePathStyle: true })
 
     if (!args.inputFile.endsWith('.json')) throw new Error('InputFile must be a json file');
 
@@ -105,8 +105,8 @@ export class SnowballSync extends Command {
     }, 2500)
     logInterval.unref();
 
-    logger.info({startOffset: startIndex, files: mani.files.length}, 'Upload:Start')
-    for (let index = startIndex; index < mani.files.length; index ++) {
+    logger.info({ startOffset: startIndex, files: mani.files.length }, 'Upload:Start')
+    for (let index = startIndex; index < mani.files.length; index++) {
       const file = mani.files[index];
       const p = queue(async () => {
         count++;
