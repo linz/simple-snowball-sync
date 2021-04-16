@@ -99,7 +99,7 @@ export class SnowballSync extends Command {
     const [bucket, ...prefix] = flags.target.slice(5).split('/');
 
     logger.info(
-      { target: { bucket, prefix }, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() },
+      { target: { bucket, prefix: prefix.join('/') }, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() },
       'Sync:Start',
     );
 
