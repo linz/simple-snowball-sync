@@ -174,19 +174,15 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     packer.finalize();
 
     log.info({ count: Stats.count, total: Stats.totalFiles }, 'Upload:Start');
-    await client
-      .upload(
-        {
-          Bucket: target.bucket,
-          Key: path.join(target.key, tarFileName),
-          Body: passStream,
-          Metadata: {
-            'snowball-auto-extract': 'true',
-          },
-        },
-        S3UploadOptions,
-      )
-      .promise();
+    const uploadCtx = {
+      Bucket: target.bucket,
+      Key: path.join(target.key, tarFileName),
+      Body: passStream,
+      Metadata: {
+        'snowball-auto-extract': 'true',
+      },
+    };
+    await client.upload(uploadCtx, S3UploadOptions).promise();
     await tarPromise;
   }
 }
