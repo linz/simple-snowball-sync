@@ -56,7 +56,11 @@ async function findMostRecentUpload(
   }
   if (foundNotUploaded < 0) return mani.files.length;
   if (foundUploaded < 0) return 0;
-  for (let i = Math.max(foundUploaded - checkRange, 0); i < Math.min(foundNotUploaded + checkRange, mani.files.length); i++) {
+  for (
+    let i = Math.max(foundUploaded - checkRange, 0);
+    i < Math.min(foundNotUploaded + checkRange, mani.files.length);
+    i++
+  ) {
     const file = mani.files[i];
     const ctx = {
       Bucket: bucket,
@@ -104,16 +108,13 @@ export class SnowballSync extends Command {
 
     const mani = JSON.parse((await fs.readFile(args.inputFile)).toString()) as Manifest;
 
-
     /** Filter files down to MB size */
     if (flags.filter) {
       const filterSize = flags.filter * 1024 * 1024;
       const beforeCount = mani.files.length;
-       mani.files = mani.files.filter(f => f.size > filterSize);
-       logger.info({beforeCount, afterCount:mani.files.length},'FilterFiles')
+      mani.files = mani.files.filter((f) => f.size > filterSize);
+      logger.info({ beforeCount, afterCount: mani.files.length }, 'FilterFiles');
     }
-
-
 
     let count = 0;
     let size = 0;
@@ -130,7 +131,10 @@ export class SnowballSync extends Command {
       const percent = ((count / mani.files.length) * 100).toFixed(2);
       const duration = (Date.now() - lastDuration) / 1000;
       lastDuration = Date.now();
-      logger.info({ count, percent, transferred: mbMoved, speed: mbMoved/duration, lastFile, duration }, 'Upload:Progress');
+      logger.info(
+        { count, percent, transferred: mbMoved, speed: mbMoved / duration, lastFile, duration },
+        'Upload:Progress',
+      );
     }, 2000);
     logInterval.unref();
 
@@ -139,8 +143,6 @@ export class SnowballSync extends Command {
       const file = mani.files[index];
       const p = queue(async () => {
         count++;
-
-
         const uploadCtx = {
           Bucket: bucket,
           Key: path.join(...prefix, file.path),
@@ -170,6 +172,6 @@ export class SnowballSync extends Command {
 
     await Promise.all(promises);
 
-    logger.info({ sizeMb: (size / 1024 /1024).toFixed(2), count}, 'Upload:Done')
+    logger.info({ sizeMb: (size / 1024 / 1024).toFixed(2), count }, 'Upload:Done');
   }
 }
