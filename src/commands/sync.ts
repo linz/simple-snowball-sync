@@ -126,7 +126,6 @@ export class SnowballSync extends Command {
     let size = 0;
     let lastSize = 0;
     let promises = [];
-    let lastFile = '';
 
     const startIndex = await findMostRecentUpload(mani, bucket, prefix, flags.concurrency);
 
@@ -146,7 +145,7 @@ export class SnowballSync extends Command {
       const percent = ((count / mani.files.length) * 100).toFixed(2);
       lastDuration = Date.now();
       logger.info(
-        { count, percent, mbMoved, speedLast, totalMbMoved, speedTotal, lastFile, duration },
+        { count, percent, mbMoved, speedLast, totalMbMoved, speedTotal,  duration },
         'Upload:Progress',
       );
     }, 2000);
@@ -173,8 +172,6 @@ export class SnowballSync extends Command {
           'Upload:Done',
         );
         size += file.size;
-        lastFile = file.path;
-        // await new Promise(resolve => setTimeout(resolve, 100))
       });
 
       promises.push(p);
