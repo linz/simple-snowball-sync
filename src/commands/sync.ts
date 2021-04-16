@@ -141,15 +141,20 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
 
 async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
   let log = logger.child({ type: 'small' });
-  const startIndex = await s3Util.findUploaded(client, files, target, log);
-  files = files.slice(startIndex);
 
-  const uploadId = new Date().getTime().toString(32);
   let tarIndex = 0;
   for (const chunk of chunkSmallFiles(files)) {
-    const tarFileName = `tar-${uploadId}-${tarIndex++}.tar`;
-    const targetUri = `s3://${target.bucket}/${path.join(path.join(target.key, tarFileName))}`;
+    const tarFileName = `batch-${tarIndex++}.tar`;
+    const targetFileName = path.join(path.join(target.key, tarFileName));
+    const targetUri = `s3://${target.bucket}/${targetFileName}`;
     log = log.child({ target: targetUri });
+
+    const head = await s3Util.head(client, { Bucket: target.bucket, Key: targetFileName });
+    if (head) {
+      log.info('Tar:Exists');
+      continue;
+    }
+
     const packer = tar.pack();
     log.info({ files: chunk.length }, 'Tar:Start');
     const tarPromise = new Promise((resolve) => packer.on('end', resolve));
@@ -176,7 +181,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     log.info({ count: Stats.count, total: Stats.totalFiles }, 'Upload:Start');
     const uploadCtx = {
       Bucket: target.bucket,
-      Key: path.join(target.key, tarFileName),
+      Key: targetFileName,
       Body: passStream,
       Metadata: {
         'snowball-auto-extract': 'true',
