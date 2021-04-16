@@ -1,5 +1,5 @@
 {
-  "name": "simple-snowball-sync",
+  "name": "@linzjs/simple-snowball-sync",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
@@ -27,6 +27,6 @@
   },
   "oclif": {
     "commands": "./build/src/commands",
-    "bin": "cotar"
+    "bin": "sss"
   }
 }
