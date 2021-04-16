@@ -43,6 +43,7 @@ async function findMostRecentUpload(mani: Manifest, bucket: string, prefix: stri
     count++;
     if (count > 10) break;
   }
+  if (foundUploaded < 0) return 0;
   for (let i = foundUploaded - checkRange; i < foundNotUploaded + checkRange; i++) {
     const file = mani.files[i];
     const ctx = {
@@ -82,7 +83,7 @@ export class SnowballSync extends Command {
     let endpoint = flags.endpoint;
     if (!endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
     logger.info({ endpoint }, 'SettingS3 Endpoint')
-    client = new S3({ endpoint, s3ForcePathStyle: true })
+    client = new S3({ endpoint, s3ForcePathStyle:true })
 
     if (!args.inputFile.endsWith('.json')) throw new Error('InputFile must be a json file');
 
