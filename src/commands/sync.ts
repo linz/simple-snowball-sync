@@ -123,15 +123,18 @@ export class SnowballSync extends Command {
 
     const startIndex = await findMostRecentUpload(mani, bucket, prefix, flags.concurrency);
 
+    let lastDuration = Date.now();
     const logInterval = setInterval(() => {
-      const mbMoved = ((size - lastSize) / 1024 / 1024).toFixed(2);
+      const mbMoved = Number(((size - lastSize) / 1024 / 1024).toFixed(2));
       lastSize = size;
       const percent = ((count / mani.files.length) * 100).toFixed(2);
-      logger.info({ count, percent, transferred: mbMoved, lastFile }, 'UploadProgress');
-    }, 2500);
+      const duration = (Date.now() - lastDuration) / 1000;
+      lastDuration = Date.now();
+      logger.info({ count, percent, transferred: mbMoved, speed: mbMoved/duration, lastFile, duration }, 'Upload:Progress');
+    }, 2000);
     logInterval.unref();
 
-    logger.info({ startOffset: startIndex, files: mani.files.length }, 'Upload:Start');
+    logger.info({ startOffset: startIndex, files: mani.files.length }, 'Upload');
     for (let index = startIndex; index < mani.files.length; index++) {
       const file = mani.files[index];
       const p = queue(async () => {
