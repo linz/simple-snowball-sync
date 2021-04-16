@@ -1,7 +1,7 @@
 import Command, { flags } from '@oclif/command';
 import S3 from 'aws-sdk/clients/s3';
 import { createReadStream, promises as fs } from 'fs';
-import { PassThrough } from 'node:stream';
+import { PassThrough } from 'stream';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import * as tar from 'tar-stream';
