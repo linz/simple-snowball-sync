@@ -80,6 +80,7 @@ export class SnowballSync extends Command {
     endpoint: flags.string({ description: 'snowball endpoint', required: true }),
     concurrency: flags.integer({ description: 'Number of upload threads to run', default: 5 }),
     verbose: flags.boolean({ description: 'verbose logging' }),
+    filter: flags.integer({ description: 'Only sync files bigger than this (Mb)' }),
     limit: flags.integer({ description: 'Only ingest this many files' }),
   };
 
@@ -102,6 +103,17 @@ export class SnowballSync extends Command {
     if (!args.inputFile.endsWith('.json')) throw new Error('InputFile must be a json file');
 
     const mani = JSON.parse((await fs.readFile(args.inputFile)).toString()) as Manifest;
+
+
+    /** Filter files down to MB size */
+    if (flags.filter) {
+      const filterSize = flags.filter * 1024 * 1024;
+      const beforeCount = mani.files.length;
+       mani.files = mani.files.filter(f => f.size > filterSize);
+       logger.info({beforeCount, afterCount:mani.files.length},'FilterFiles')
+    }
+
+
 
     let count = 0;
     let size = 0;
@@ -138,6 +150,10 @@ export class SnowballSync extends Command {
           'Upload:Start',
         );
         await client.upload(uploadCtx).promise();
+        logger.trace(
+          { index, path: file.path, size: file.size, target: `s3://${bucket}/${uploadCtx.Key}` },
+          'Upload:Done',
+        );
         // await new Promise(resolve => setTimeout(resolve, 100))
       });
 
