@@ -55,7 +55,7 @@ async function findMostRecentUpload(
     if (count > 10) break;
   }
   if (foundUploaded < 0) return 0;
-  for (let i = foundUploaded - checkRange; i < foundNotUploaded + checkRange; i++) {
+  for (let i = Math.max(foundUploaded - checkRange, 0); i < Math.min(foundNotUploaded + checkRange, mani.files.length); i++) {
     const file = mani.files[i];
     const ctx = {
       Bucket: bucket,
