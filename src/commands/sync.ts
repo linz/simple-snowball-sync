@@ -113,7 +113,7 @@ export class SnowballSync extends Command {
       const filterSize = flags.filter * 1024 * 1024;
       const beforeCount = mani.files.length;
       mani.files = mani.files.filter((f) => f.size > filterSize);
-      logger.info({ beforeCount, afterCount: mani.files.length }, 'FilterFiles');
+      logger.info({ beforeCount, afterCount: mani.files.length, filterMb: flags.filter }, 'FilterFiles');
     }
 
     let count = 0;
