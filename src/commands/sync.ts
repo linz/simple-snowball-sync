@@ -17,8 +17,13 @@ const Stats = {
   totalSize: 0,
 };
 
+const OneMb = 1024 * 1024;
+const OneGb = OneMb * 1024;
+const MaxTarSizeByes = OneGb;
+const MaxTarFileCount = 10_000;
+
 const S3UploadOptions = {
-  partSize: 100, // 50mb chunks
+  partSize: 100 * OneMb, // 100mb chunks
 };
 
 let Q = pLimit(5);
@@ -140,7 +145,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
   for (const chunk of chunkSmallFiles(files)) {
     const tarFileName = `tar-${uploadId}-${tarIndex++}.tar`;
     const packer = tar.pack();
-    logger.info({ files: chunk.length, tar: tarFileName }, 'PackingTar');
+    logger.info({ files: chunk.length, tar: tarFileName }, 'Tar:Start');
     const tarPromise = new Promise((resolve) => packer.on('end', resolve));
 
     const passStream = new PassThrough();
@@ -180,9 +185,6 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     logger.info({ count: Stats.count, total: chunkSmallFiles.length, tar: tarFileName }, 'Tar:Upload');
   }
 }
-
-const MaxTarSizeByes = 1024 * 1024 * 1024;
-const MaxTarFileCount = 10_000;
 
 /** Chunk small files into 10,000 file or 1GB chunks which ever occurs first*/
 function* chunkSmallFiles(files: ManifestFile[]): Generator<ManifestFile[]> {
