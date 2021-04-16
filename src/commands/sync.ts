@@ -136,8 +136,7 @@ export class SnowballSync extends Command {
       const file = mani.files[index];
       const p = queue(async () => {
         count++;
-        size += file.size;
-        lastFile = file.path;
+
 
         const uploadCtx = {
           Bucket: bucket,
@@ -154,6 +153,8 @@ export class SnowballSync extends Command {
           { index, path: file.path, size: file.size, target: `s3://${bucket}/${uploadCtx.Key}` },
           'Upload:Done',
         );
+        size += file.size;
+        lastFile = file.path;
         // await new Promise(resolve => setTimeout(resolve, 100))
       });
 
