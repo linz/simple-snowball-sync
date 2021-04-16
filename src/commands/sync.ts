@@ -1,83 +1,27 @@
 import Command, { flags } from '@oclif/command';
-import { logger } from '../log';
+import S3 from 'aws-sdk/clients/s3';
 import { createReadStream, promises as fs } from 'fs';
-import { Manifest } from '../manifest';
+import { PassThrough } from 'node:stream';
 import pLimit from 'p-limit';
 import * as path from 'path';
-import S3 from 'aws-sdk/clients/s3';
+import * as tar from 'tar-stream';
+import { logger } from '../log';
+import { Manifest, ManifestFile } from '../manifest';
+import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
 
-let client: S3;
+const Stats = {
+  count: 0,
+  size: 0,
+  totalFiles: 0,
+  totalSize: 0,
+};
 
-function headObject(ctx: { Bucket: string; Key: string }): Promise<S3.HeadObjectOutput | false> {
-  return client
-    .headObject(ctx)
-    .promise()
-    .catch((e) => {
-      if (e.code === 'NotFound') return false;
-      throw e;
-    });
-}
+const S3UploadOptions = {
+  partSize: 100, // 50mb chunks
+};
 
-async function findMostRecentUpload(
-  mani: Manifest,
-  bucket: string,
-  prefix: string[],
-  checkRange: number,
-): Promise<number> {
-  let foundUploaded = -1;
-  let foundNotUploaded = -1;
-  let count = 0;
-  let low = 0;
-  let high = mani.files.length - 1;
-
-  while (low <= high) {
-    const mid = (low + high) >>> 1;
-    const file = mani.files[mid];
-    const ctx = {
-      Bucket: bucket,
-      Key: path.join(...prefix, file.path),
-    };
-
-    const found = await headObject(ctx);
-    if (found) {
-      if (mid > foundUploaded) foundUploaded = mid;
-      low = mid + 1;
-    } else {
-      if (mid < foundNotUploaded || foundNotUploaded === -1) foundNotUploaded = mid;
-      high = mid - 1;
-    }
-
-    logger.info(
-      { index: mid, path: ctx.Key, exists: found !== false, foundUploaded, foundNotUploaded, low, high },
-      'LastUpload:Search',
-    );
-    count++;
-    if (count > 50) break;
-  }
-  if (foundNotUploaded < 0) return mani.files.length;
-  if (foundUploaded < 0) return 0;
-  for (
-    let i = Math.max(foundUploaded - checkRange, 0);
-    i < Math.min(foundNotUploaded + checkRange, mani.files.length);
-    i++
-  ) {
-    const file = mani.files[i];
-    const ctx = {
-      Bucket: bucket,
-      Key: path.join(...prefix, file.path),
-    };
-    const head = await headObject(ctx);
-    logger.debug(
-      { index: i, path: ctx.Key, exists: head !== true, sizeS3: head && head.ContentLength, sizeLocal: file.size },
-      'LastUpload:SearchForComplete',
-    );
-
-    if (head === false) return i;
-    if (head.ContentLength !== file.size) return i;
-  }
-  throw new Error('Failed');
-}
+let Q = pLimit(5);
 
 export class SnowballSync extends Command {
   static flags = {
@@ -85,8 +29,7 @@ export class SnowballSync extends Command {
     endpoint: flags.string({ description: 'snowball endpoint', required: true }),
     concurrency: flags.integer({ description: 'Number of upload threads to run', default: 5 }),
     verbose: flags.boolean({ description: 'verbose logging' }),
-    filter: flags.integer({ description: 'Only sync files bigger than this (Mb)' }),
-    limit: flags.integer({ description: 'Only ingest this many files' }),
+    filter: flags.integer({ description: 'Use tar to sync files smaller than this (Mb)', default: 1 }),
   };
 
   static args = [{ name: 'inputFile', required: true }];
@@ -94,97 +37,166 @@ export class SnowballSync extends Command {
     const { args, flags } = this.parse(SnowballSync);
     if (flags.verbose) logger.level = 'debug';
 
-    if (!flags.target?.startsWith('s3://')) throw new Error('--target must be in the format s3://bucket/prefix');
+    const target = s3Util.parse(flags.target);
+    if (target == null) throw new Error('--target must be in the format s3://bucket/prefix');
 
-    const [bucket, ...prefix] = flags.target.slice(5).split('/');
-
-    logger.info(
-      {
-        target: { bucket, prefix: prefix.join('/') },
-        concurrency: flags.concurrency,
-        endpoint: flags.endpoint,
-        ...getVersion(),
-      },
-      'Sync:Start',
-    );
-
-    const queue = pLimit(flags.concurrency);
+    logger.info({ target, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() }, 'Sync:Start');
 
     let endpoint = flags.endpoint;
     if (!endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
     logger.info({ endpoint }, 'SettingS3 Endpoint');
-    client = new S3({ endpoint, s3ForcePathStyle: true });
+    const client = new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true });
+
+    if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
 
     if (!args.inputFile.endsWith('.json')) throw new Error('InputFile must be a json file');
 
     const mani = JSON.parse((await fs.readFile(args.inputFile)).toString()) as Manifest;
+    Stats.totalFiles = mani.files.length;
+    Stats.totalSize = mani.size;
 
     /** Filter files down to MB size */
-    if (flags.filter) {
-      const filterSize = flags.filter * 1024 * 1024;
-      const beforeCount = mani.files.length;
-      mani.files = mani.files.filter((f) => f.size > filterSize);
-      logger.info({ beforeCount, afterCount: mani.files.length, filterMb: flags.filter }, 'FilterFiles');
+    const filterSize = flags.filter * 1024 * 1024;
+    const smallFiles: ManifestFile[] = [];
+    const bigFiles: ManifestFile[] = [];
+    for (const file of mani.files) {
+      if (file.size > filterSize) bigFiles.push(file);
+      else smallFiles.push(file);
     }
+    logger.info({ bigFiles: bigFiles.length, smallFiles: smallFiles.length, filterMb: flags.filter }, 'FilterFiles');
 
-    let count = 0;
-    let size = 0;
-    let lastSize = 0;
-    let promises = [];
+    watchStats();
 
-    const startIndex = await findMostRecentUpload(mani, bucket, prefix, flags.concurrency);
+    // Upload larger files
+    await uploadBigFiles(client, mani.path, bigFiles, target);
+    // Tar small files and upload them
+    await uploadSmallFiles(client, mani.path, smallFiles, target);
+    // Upload the manifest
+    await client
+      .upload({
+        Bucket: target.bucket,
+        Key: path.join(target.key, 'manifest.json'),
+        Body: createReadStream(args.inputFile),
+      })
+      .promise();
 
-    const startTime = Date.now();
-    let lastDuration = Date.now();
-    const logInterval = setInterval(() => {
-      const mbMoved = Number(((size - lastSize) / 1024 / 1024).toFixed(2));
-      const totalMbMoved = Number((size / 1024 / 1024).toFixed(2));
+    logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
+  }
+}
 
-      const totalTime = (Date.now() - startTime) / 1000;
-      const speedTotal = Number((totalMbMoved / totalTime).toFixed(2));
+function watchStats(): void {
+  const startTime = Date.now();
+  const logInterval = setInterval(() => {
+    const movedMb = Number((Stats.size / 1024 / 1024).toFixed(2));
 
-      lastSize = size;
-      const duration = (Date.now() - lastDuration) / 1000;
-      const speedLast = Number((mbMoved / duration).toFixed(2));
+    const totalTime = (Date.now() - startTime) / 1000;
+    const speed = Number((movedMb / totalTime).toFixed(2));
 
-      const percent = ((count / mani.files.length) * 100).toFixed(2);
-      lastDuration = Date.now();
-      logger.info({ count, percent, mbMoved, speedLast, totalMbMoved, speedTotal, duration }, 'Upload:Progress');
-    }, 2000);
-    logInterval.unref();
+    const percent = ((Stats.size / Stats.totalSize) * 100).toFixed(2);
+    logger.info({ count: Stats.count, percent, movedMb, speed }, 'Upload:Progress');
+  }, 2000);
+  logInterval.unref();
+}
 
-    logger.info({ startOffset: startIndex, files: mani.files.length }, 'Upload');
-    for (let index = startIndex; index < mani.files.length; index++) {
-      const file = mani.files[index];
-      const p = queue(async () => {
-        count++;
-        const uploadCtx = {
-          Bucket: bucket,
-          Key: path.join(...prefix, file.path),
-          Body: createReadStream(path.join(mani.path, file.path)),
-        };
+async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
+  let promises: Promise<unknown>[] = [];
 
-        logger.debug(
-          { index, path: file.path, size: file.size, target: `s3://${bucket}/${uploadCtx.Key}` },
-          'Upload:Start',
-        );
-        await client.upload(uploadCtx).promise();
-        logger.trace(
-          { index, path: file.path, size: file.size, target: `s3://${bucket}/${uploadCtx.Key}` },
-          'Upload:Done',
-        );
-        size += file.size;
+  const startIndex = await s3Util.findUploaded(client, files, target, logger);
+  logger.info({ startOffset: startIndex, files: files.length }, 'Upload');
+  for (let index = startIndex; index < files.length; index++) {
+    const file = files[index];
+    const p = Q(async () => {
+      const uploadCtx = {
+        Bucket: target.bucket,
+        Key: path.join(target.key, file.path),
+        Body: createReadStream(path.join(root, file.path)),
+      };
+      const targetUri = `s3://${target.bucket}/${uploadCtx.Key}`;
+
+      logger.debug({ index, path: file.path, size: file.size, target: targetUri }, 'Upload:Start');
+      await client.upload(uploadCtx, S3UploadOptions).promise();
+      logger.trace({ index, path: file.path, size: file.size, target: targetUri }, 'Upload:Done');
+      Stats.count++;
+      Stats.size += file.size;
+    });
+
+    promises.push(p);
+    if (promises.length > 1000) {
+      logger.debug({ index }, 'Upload:Join');
+      await Promise.all(promises);
+      promises = [];
+    }
+  }
+
+  await Promise.all(promises);
+}
+
+async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
+  const startIndex = await s3Util.findUploaded(client, files, target, logger);
+  files = files.slice(startIndex);
+
+  const uploadId = new Date().getTime().toString(32);
+  let tarIndex = 0;
+  for (const chunk of chunkSmallFiles(files)) {
+    const tarFileName = `tar-${uploadId}-${tarIndex++}.tar`;
+    const packer = tar.pack();
+    logger.info({ files: chunk.length, tar: tarFileName }, 'PackingTar');
+    const tarPromise = new Promise((resolve) => packer.on('end', resolve));
+
+    const passStream = new PassThrough();
+    packer.pipe(passStream);
+
+    const promises = chunk.map((file) => {
+      return Q(async () => {
+        const filePath = path.join(root, file.path);
+        const buffer = await fs.readFile(filePath);
+        packer.entry({ name: file.path }, buffer);
+        if (Stats.count % 1000 === 0) {
+          logger.debug({ count: Stats.count, total: chunkSmallFiles.length, tar: tarFileName }, 'Tar:Progress');
+        }
+
+        Stats.size += file.size;
+        Stats.count++;
       });
-
-      promises.push(p);
-      if (promises.length > 1000) {
-        await Promise.all(promises);
-        promises = [];
-      }
-    }
+    });
 
     await Promise.all(promises);
 
-    logger.info({ sizeMb: (size / 1024 / 1024).toFixed(2), count }, 'Sync:Done');
+    packer.finalize();
+
+    logger.info('Tar:Upload');
+    await client.upload(
+      {
+        Bucket: target.bucket,
+        Key: path.join(target.key, tarFileName),
+        Body: passStream,
+        Metadata: {
+          'snowball-auto-extract': 'true',
+        },
+      },
+      S3UploadOptions,
+    );
+    await tarPromise;
+    logger.info({ count: Stats.count, total: chunkSmallFiles.length, tar: tarFileName }, 'Tar:Upload');
   }
+}
+
+const MaxTarSizeByes = 1024 * 1024 * 1024;
+const MaxTarFileCount = 10_000;
+
+/** Chunk small files into 10,000 file or 1GB chunks which ever occurs first*/
+function* chunkSmallFiles(files: ManifestFile[]): Generator<ManifestFile[]> {
+  let output = [];
+  let currentSize = 0;
+  for (const file of files) {
+    output.push(file);
+    currentSize += file.size;
+    if (output.length > MaxTarFileCount || currentSize > MaxTarSizeByes) {
+      yield output;
+      output = [];
+      currentSize = 0;
+    }
+  }
+
+  if (output.length > 0) yield output;
 }
