@@ -5,6 +5,7 @@ import { Manifest } from '../manifest';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import S3 from 'aws-sdk/clients/s3';
+import { getVersion } from '../version';
 
 let client: S3;
 
@@ -97,6 +98,11 @@ export class SnowballSync extends Command {
 
     const [bucket, ...prefix] = flags.target.slice(5).split('/');
 
+    logger.info(
+      { target: { bucket, prefix }, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() },
+      'Sync:Start',
+    );
+
     const queue = pLimit(flags.concurrency);
 
     let endpoint = flags.endpoint;
@@ -172,6 +178,6 @@ export class SnowballSync extends Command {
 
     await Promise.all(promises);
 
-    logger.info({ sizeMb: (size / 1024 / 1024).toFixed(2), count }, 'Upload:Done');
+    logger.info({ sizeMb: (size / 1024 / 1024).toFixed(2), count }, 'Sync:Done');
   }
 }

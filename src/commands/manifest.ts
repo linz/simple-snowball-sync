@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import { logger } from '../log';
 import { Manifest } from '../manifest';
 import * as path from 'path';
+import { getVersion } from '../version';
 
 async function* parseDirectory(basePath: string, currentPath: string[]): AsyncGenerator<string> {
   const currentFolder = path.join(basePath, ...currentPath);
@@ -29,6 +30,8 @@ export class CreateManifest extends Command {
     const { args, flags } = this.parse(CreateManifest);
     if (flags.verbose) logger.level = 'debug';
 
+    logger.info(getVersion(), 'Manifest:Start');
+
     const inputPath = path.resolve(args.inputFile);
     const stat = await fs.stat(inputPath);
     if (!stat.isDirectory()) {
@@ -54,6 +57,6 @@ export class CreateManifest extends Command {
 
     const outputFile = args.inputFile.replace(pathReg, '_') + '.json';
     await fs.writeFile(outputFile, JSON.stringify(manifest, null, 2));
-    logger.info({ path: outputFile, count: manifest.files.length }, 'ManifestCreated');
+    logger.info({ path: outputFile, count: manifest.files.length }, 'Manifest:Created');
   }
 }
