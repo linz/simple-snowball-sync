@@ -104,10 +104,11 @@ function watchStats(): void {
 }
 
 async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
+  const log = logger.child({ type: 'big' });
   let promises: Promise<unknown>[] = [];
 
   const startIndex = await s3Util.findUploaded(client, files, target, logger);
-  logger.info({ startOffset: startIndex, files: files.length }, 'Upload');
+  log.info({ startOffset: startIndex, files: files.length }, 'Upload');
   for (let index = startIndex; index < files.length; index++) {
     const file = files[index];
     const p = Q(async () => {
@@ -118,9 +119,11 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
       };
       const targetUri = `s3://${target.bucket}/${uploadCtx.Key}`;
 
-      logger.debug({ index, path: file.path, size: file.size, target: targetUri }, 'Upload:Start');
+      log.debug(
+        { count: Stats.count, total: Stats.totalFiles, path: file.path, size: file.size, target: targetUri },
+        'Upload:Start',
+      );
       await client.upload(uploadCtx, S3UploadOptions).promise();
-      logger.trace({ index, path: file.path, size: file.size, target: targetUri }, 'Upload:Done');
       Stats.count++;
       Stats.size += file.size;
     });
@@ -137,15 +140,18 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
 }
 
 async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
-  const startIndex = await s3Util.findUploaded(client, files, target, logger);
+  let log = logger.child({ type: 'small' });
+  const startIndex = await s3Util.findUploaded(client, files, target, log);
   files = files.slice(startIndex);
 
   const uploadId = new Date().getTime().toString(32);
   let tarIndex = 0;
   for (const chunk of chunkSmallFiles(files)) {
     const tarFileName = `tar-${uploadId}-${tarIndex++}.tar`;
+    const targetUri = `s3://${target.bucket}/${path.join(path.join(target.key, tarFileName))}`;
+    log = log.child({ target: targetUri });
     const packer = tar.pack();
-    logger.info({ files: chunk.length, tar: tarFileName }, 'Tar:Start');
+    log.info({ files: chunk.length }, 'Tar:Start');
     const tarPromise = new Promise((resolve) => packer.on('end', resolve));
 
     const passStream = new PassThrough();
@@ -156,9 +162,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
         const filePath = path.join(root, file.path);
         const buffer = await fs.readFile(filePath);
         packer.entry({ name: file.path }, buffer);
-        if (Stats.count % 1000 === 0) {
-          logger.debug({ count: Stats.count, total: chunkSmallFiles.length, tar: tarFileName }, 'Tar:Progress');
-        }
+        if (Stats.count % 1_000 === 0) log.debug({ count: Stats.count, total: Stats.totalFiles }, 'Tar:Progress');
 
         Stats.size += file.size;
         Stats.count++;
@@ -169,7 +173,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
 
     packer.finalize();
 
-    logger.info('Tar:Upload');
+    log.info({ count: Stats.count, total: Stats.totalFiles }, 'Upload:Start');
     await client.upload(
       {
         Bucket: target.bucket,
@@ -182,7 +186,6 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
       S3UploadOptions,
     );
     await tarPromise;
-    logger.info({ count: Stats.count, total: chunkSmallFiles.length, tar: tarFileName }, 'Tar:Upload');
   }
 }
 
