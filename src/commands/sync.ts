@@ -158,7 +158,7 @@ export class SnowballSync extends Command {
       });
 
       promises.push(p);
-      if (promises.length > 250) {
+      if (promises.length > 1000) {
         await Promise.all(promises);
         promises = [];
       }
