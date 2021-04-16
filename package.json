@@ -4,7 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "build": "tsc --pretty"
+    "build": "tsc --pretty",
+    "lint": "eslint 'src/**/*.{js,ts,tsx}' --quiet --fix",
+    "test": "ospec build/**/*.test.js"
   },
   "devDependencies": {
     "@linzjs/style": "^2.0.0"
@@ -22,6 +24,9 @@
     "build/src",
     "bin"
   ],
+  "bin": {
+    "sss": "./bin/sss"
+  },
   "publishConfig": {
     "access": "public"
   },

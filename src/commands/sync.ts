@@ -99,7 +99,12 @@ export class SnowballSync extends Command {
     const [bucket, ...prefix] = flags.target.slice(5).split('/');
 
     logger.info(
-      { target: { bucket, prefix: prefix.join('/') }, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() },
+      {
+        target: { bucket, prefix: prefix.join('/') },
+        concurrency: flags.concurrency,
+        endpoint: flags.endpoint,
+        ...getVersion(),
+      },
       'Sync:Start',
     );
 
@@ -144,10 +149,7 @@ export class SnowballSync extends Command {
 
       const percent = ((count / mani.files.length) * 100).toFixed(2);
       lastDuration = Date.now();
-      logger.info(
-        { count, percent, mbMoved, speedLast, totalMbMoved, speedTotal,  duration },
-        'Upload:Progress',
-      );
+      logger.info({ count, percent, mbMoved, speedLast, totalMbMoved, speedTotal, duration }, 'Upload:Progress');
     }, 2000);
     logInterval.unref();
 
