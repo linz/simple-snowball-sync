@@ -148,5 +148,7 @@ export class SnowballSync extends Command {
     }
 
     await Promise.all(promises);
+
+    logger.info({ sizeMb: (size / 1024 /1024).toFixed(2), count}, 'Upload:Done')
   }
 }
