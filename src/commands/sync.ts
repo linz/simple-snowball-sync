@@ -13,9 +13,15 @@ import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
 
 const Stats = {
+  /** Files uploaded over all runs */
   count: 0,
+  /** Total bytes uploaded this run */
   size: 0,
+  /** Total bytes uploaded over all runs */
+  progressSize: 0,
+  /** Total files to upload */
   totalFiles: 0,
+  /** Total size of files to upload */
   totalSize: 0,
 };
 
@@ -117,7 +123,7 @@ function watchStats(): void {
     const totalTime = (Date.now() - startTime) / 1000;
     const speed = Number((movedMb / totalTime).toFixed(2));
 
-    const percent = ((Stats.size / Stats.totalSize) * 100).toFixed(2);
+    const percent = ((Stats.progressSize / Stats.totalSize) * 100).toFixed(3);
     logger.info({ count: Stats.count, percent, movedMb, speed }, 'Upload:Progress');
   }, 5000);
   logInterval.unref();
@@ -128,8 +134,11 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
   let promises: Promise<unknown>[] = [];
 
   const startIndex = await s3Util.findUploaded(client, files, target, logger);
+  // Update the stats for where we started from
   Stats.count += startIndex;
-  log.info({ startOffset: startIndex, files: files.length }, 'Upload');
+  for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
+
+  log.info({ startOffset: startIndex, files: files.length }, 'Upload:Start');
   for (let index = startIndex; index < files.length; index++) {
     const file = files[index];
     const p = Q(async () => {
