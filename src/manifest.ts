@@ -7,4 +7,5 @@ export interface Manifest {
 export interface ManifestFile {
   path: string;
   size: number;
+  hash?: string;
 }

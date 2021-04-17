@@ -9,6 +9,8 @@ import { logger } from '../log';
 import { Manifest, ManifestFile } from '../manifest';
 import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
+import { createHash } from 'crypto';
+import { writeFile } from 'node:fs';
 
 const Stats = {
   count: 0,
@@ -19,7 +21,7 @@ const Stats = {
 
 const OneMb = 1024 * 1024;
 const OneGb = OneMb * 1024;
-const MaxTarSizeByes = OneGb;
+const MaxTarSizeByes = 5 * OneGb;
 const MaxTarFileCount = 10_000;
 
 const S3UploadOptions = {
@@ -30,10 +32,10 @@ let Q = pLimit(5);
 
 export class SnowballSync extends Command {
   static flags = {
-    target: flags.string({ description: 's3 location to store files' }),
-    endpoint: flags.string({ description: 'snowball endpoint', required: true }),
+    target: flags.string({ description: 'S3 location to store files' }),
+    endpoint: flags.string({ description: 'Snowball endpoint' }),
     concurrency: flags.integer({ description: 'Number of upload threads to run', default: 5 }),
-    verbose: flags.boolean({ description: 'verbose logging' }),
+    verbose: flags.boolean({ description: 'Verbose logging' }),
     filter: flags.integer({ description: 'Use tar to sync files smaller than this (Mb)', default: 1 }),
   };
 
@@ -48,8 +50,8 @@ export class SnowballSync extends Command {
     logger.info({ target, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() }, 'Sync:Start');
 
     let endpoint = flags.endpoint;
-    if (!endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
-    logger.info({ endpoint }, 'SettingS3 Endpoint');
+    if (endpoint != null && !endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
+    if (endpoint) logger.info({ endpoint }, 'SettingS3 Endpoint');
     const client = new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true });
 
     if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
@@ -72,6 +74,8 @@ export class SnowballSync extends Command {
 
     watchStats();
 
+    watchManifest(args.inputFile, mani);
+
     // Upload larger files
     await uploadBigFiles(client, mani.path, bigFiles, target);
     // Tar small files and upload them
@@ -81,12 +85,28 @@ export class SnowballSync extends Command {
       .upload({
         Bucket: target.bucket,
         Key: path.join(target.key, 'manifest.json'),
-        Body: createReadStream(args.inputFile),
+        Body: JSON.stringify(mani),
       })
       .promise();
 
+    await fs.writeFile(args.inputFile + '.1', JSON.stringify(mani, null, 2));
     logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
   }
+}
+
+/** Every 30 seconds write out where we are upto */
+function watchManifest(path: string, manifest: Manifest): void {
+  const current = JSON.stringify(manifest);
+  const logInterval = setInterval(async () => {
+    const updated = JSON.stringify(manifest);
+    if (current === updated) return;
+
+    logger.info('WriteUpdatedManifest');
+    console.time('writeManifest');
+    await fs.writeFile(path + '.1', updated);
+    console.timeEnd('writeManifest');
+  }, 10_000);
+  logInterval.unref();
 }
 
 function watchStats(): void {
@@ -112,10 +132,14 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
   for (let index = startIndex; index < files.length; index++) {
     const file = files[index];
     const p = Q(async () => {
+      const hash = createHash('sha256');
+      const fileStream = createReadStream(path.join(root, file.path));
+      fileStream.on('data', (chunk) => hash.update(chunk));
+
       const uploadCtx = {
         Bucket: target.bucket,
         Key: path.join(target.key, file.path),
-        Body: createReadStream(path.join(root, file.path)),
+        Body: fileStream,
       };
       const targetUri = `s3://${target.bucket}/${uploadCtx.Key}`;
 
@@ -126,6 +150,7 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
       await client.upload(uploadCtx, S3UploadOptions).promise();
       Stats.count++;
       Stats.size += file.size;
+      file.hash = 'sha256-' + hash.digest('base64');
     });
 
     promises.push(p);
@@ -162,15 +187,18 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     const passStream = new PassThrough();
     packer.pipe(passStream);
 
+    let totalSize = 0;
     const promises = chunk.map((file) => {
       return Q(async () => {
         const filePath = path.join(root, file.path);
         const buffer = await fs.readFile(filePath);
+
+        const fileHash = createHash('sha256').update(buffer).digest('base64');
         packer.entry({ name: file.path }, buffer);
         if (Stats.count % 1_000 === 0) log.debug({ count: Stats.count, total: Stats.totalFiles }, 'Tar:Progress');
 
-        Stats.size += file.size;
-        Stats.count++;
+        totalSize += file.size;
+        file.hash = 'sha256-' + fileHash;
       });
     });
 
@@ -189,6 +217,8 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     };
     await client.upload(uploadCtx, S3UploadOptions).promise();
     await tarPromise;
+    Stats.size += totalSize;
+    Stats.count += chunk.length;
   }
 }
 
