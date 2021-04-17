@@ -43,7 +43,7 @@ const S3UploadOptions = {
    * Force chunks to be at least 250Mb,
    * lots of small chunks (<100Mb) take too long to transfer on high speed networks
    */
-  partSize: 250 * OneMb,
+  partSize: 105 * OneMb,
 };
 
 let Q = pLimit(5);
