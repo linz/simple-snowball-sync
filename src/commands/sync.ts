@@ -10,7 +10,7 @@ import { Manifest, ManifestFile } from '../manifest';
 import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
 import { createHash } from 'crypto';
-import { writeFile } from 'node:fs';
+import { existsSync, writeFile } from 'node:fs';
 import { createGzip } from 'zlib';
 
 const Stats = {
@@ -58,8 +58,10 @@ export class SnowballSync extends Command {
     if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
 
     if (!args.inputFile.endsWith('.json')) throw new Error('InputFile must be a json file');
+    let manifestFile = args.inputFile;
+    if (existsSync(args.inputFile + '.1')) manifestFile = manifestFile + '.1';
 
-    const mani = JSON.parse((await fs.readFile(args.inputFile)).toString()) as Manifest;
+    const mani = JSON.parse((await fs.readFile(manifestFile)).toString()) as Manifest;
     Stats.totalFiles = mani.files.length;
     Stats.totalSize = mani.size;
 
@@ -106,7 +108,7 @@ function watchManifest(path: string, manifest: Manifest): void {
     console.time('writeManifest');
     await fs.writeFile(path + '.1', updated);
     console.timeEnd('writeManifest');
-  }, 10_000);
+  }, 30_000);
   logInterval.unref();
 }
 
@@ -189,6 +191,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     packer.pipe(createGzip()).pipe(passStream);
 
     let totalSize = 0;
+    let tarCount = 0;
     const promises = chunk.map((file) => {
       return Q(async () => {
         const filePath = path.join(root, file.path);
@@ -196,8 +199,10 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
 
         const fileHash = createHash('sha256').update(buffer).digest('base64');
         packer.entry({ name: file.path }, buffer);
-        if (Stats.count % 1_000 === 0) log.debug({ count: Stats.count, total: Stats.totalFiles }, 'Tar:Progress');
-
+        if (tarCount % 1_000 === 0) {
+          log.debug({ count: Stats.count, total: Stats.totalFiles, tarCount, tarTotal: chunk.length }, 'Tar:Progress');
+        }
+        tarCount++;
         totalSize += file.size;
         file.hash = 'sha256-' + fileHash;
       });
