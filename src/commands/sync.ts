@@ -1,17 +1,16 @@
 import Command, { flags } from '@oclif/command';
 import S3 from 'aws-sdk/clients/s3';
-import { createReadStream, promises as fs } from 'fs';
-import { PassThrough } from 'stream';
+import { createHash } from 'crypto';
+import { createReadStream, existsSync, promises as fs } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
+import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
+import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { Manifest, ManifestFile } from '../manifest';
 import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
-import { createHash } from 'crypto';
-import { existsSync, writeFile } from 'node:fs';
-import { createGzip } from 'zlib';
 
 const Stats = {
   count: 0,
