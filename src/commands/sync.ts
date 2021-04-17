@@ -11,6 +11,7 @@ import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
 import { createHash } from 'crypto';
 import { writeFile } from 'node:fs';
+import { createGzip } from 'zlib';
 
 const Stats = {
   count: 0,
@@ -169,7 +170,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
 
   let tarIndex = 0;
   for (const chunk of chunkSmallFiles(files)) {
-    const tarFileName = `batch-${tarIndex++}.tar`;
+    const tarFileName = `batch-${tarIndex++}.tar.gz`;
     const targetFileName = path.join(path.join(target.key, tarFileName));
     const targetUri = `s3://${target.bucket}/${targetFileName}`;
     log = log.child({ target: targetUri });
@@ -185,7 +186,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     const tarPromise = new Promise((resolve) => packer.on('end', resolve));
 
     const passStream = new PassThrough();
-    packer.pipe(passStream);
+    packer.pipe(createGzip()).pipe(passStream);
 
     let totalSize = 0;
     const promises = chunk.map((file) => {
