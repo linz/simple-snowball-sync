@@ -31,7 +31,11 @@ const MaxTarSizeByes = 5 * OneGb;
 const MaxTarFileCount = 10_000;
 
 const S3UploadOptions = {
-  partSize: 100 * OneMb, // 100mb chunks
+  /**
+   * Force chunks to be at least 250Mb,
+   * lots of small chunks (<100Mb) take too long to transfer on high speed networks
+   */
+  partSize: 250 * OneMb,
 };
 
 let Q = pLimit(5);
