@@ -21,7 +21,6 @@ async function* parseDirectory(basePath: string, currentPath: string[]): AsyncGe
 export class CreateManifest extends Command {
   static flags = {
     verbose: flags.boolean({ description: 'verbose logging' }),
-    limit: flags.integer({ description: 'Only ingest this many files' }),
   };
 
   static args = [{ name: 'inputFile', required: true }];
