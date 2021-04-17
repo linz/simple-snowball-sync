@@ -27,7 +27,15 @@ const Stats = {
 
 const OneMb = 1024 * 1024;
 const OneGb = OneMb * 1024;
+/**
+ * Limit the size of unpacked tar balls uploaded to s3
+ * Snowball allows upto 100GB per tar
+ **/
 const MaxTarSizeByes = 5 * OneGb;
+/**
+ * Limit the file count side of the tars
+ * Snowballs allow upto 100,000 files
+ */
 const MaxTarFileCount = 10_000;
 
 const S3UploadOptions = {
