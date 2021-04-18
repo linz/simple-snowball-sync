@@ -1,14 +1,15 @@
 import Command, { flags } from '@oclif/command';
 import S3 from 'aws-sdk/clients/s3';
 import { createHash } from 'crypto';
-import { createReadStream, existsSync, promises as fs } from 'fs';
+import { createReadStream, promises as fs } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
-import { Manifest, ManifestFile } from '../manifest';
+import { ManifestFile } from '../manifest';
+import { ManifestLoader } from '../manifest.loader';
 import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
 
@@ -75,18 +76,17 @@ export class SnowballSync extends Command {
     if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
 
     if (!args.inputFile.endsWith('.json')) throw new Error('InputFile must be a json file');
-    let manifestFile = args.inputFile;
-    if (existsSync(args.inputFile + '.1')) manifestFile = manifestFile + '.1';
 
-    const mani = JSON.parse((await fs.readFile(manifestFile)).toString()) as Manifest;
-    Stats.totalFiles = mani.files.length;
-    Stats.totalSize = mani.size;
+    const manifest = await ManifestLoader.load(args.inputFile);
+
+    Stats.totalFiles = manifest.files.size;
+    Stats.totalSize = manifest.size;
 
     /** Filter files down to MB size */
     const filterSize = flags.filter * 1024 * 1024;
     const smallFiles: ManifestFile[] = [];
     const bigFiles: ManifestFile[] = [];
-    for (const file of mani.files) {
+    for (const file of manifest.files.values()) {
       if (file.size > filterSize) bigFiles.push(file);
       else smallFiles.push(file);
     }
@@ -94,37 +94,23 @@ export class SnowballSync extends Command {
 
     watchStats();
 
-    watchManifest(args.inputFile, mani);
-
     // Upload larger files
-    await uploadBigFiles(client, mani.path, bigFiles, target);
+    await uploadBigFiles(client, manifest.path, bigFiles, target);
     // Tar small files and upload them
-    await uploadSmallFiles(client, mani.path, smallFiles, target);
+    await uploadSmallFiles(client, manifest.path, smallFiles, target);
+    const manifestJson = manifest.toJsonString();
     // Upload the manifest
     await client
       .upload({
         Bucket: target.bucket,
         Key: path.join(target.key, 'manifest.json'),
-        Body: JSON.stringify(mani),
+        Body: manifestJson,
       })
       .promise();
 
-    await fs.writeFile(args.inputFile + '.1', JSON.stringify(mani, null, 2));
+    await fs.writeFile(args.inputFile, manifestJson);
     logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
   }
-}
-
-/** Every 30 seconds write out where we are upto */
-export function watchManifest(path: string, manifest: Manifest): void {
-  const current = JSON.stringify(manifest);
-  const logInterval = setInterval(async () => {
-    const startTime = Date.now();
-    const updated = JSON.stringify(manifest);
-    if (current === updated) return;
-    await fs.writeFile(path + '.1', updated);
-    logger.info({ duration: Date.now() - startTime }, 'WriteUpdatedManifest');
-  }, 30_000);
-  logInterval.unref();
 }
 
 function watchStats(): void {

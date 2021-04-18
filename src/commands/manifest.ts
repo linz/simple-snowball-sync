@@ -1,8 +1,8 @@
 import { Command, flags } from '@oclif/command';
 import { promises as fs } from 'fs';
+import * as path from 'path';
 import { logger } from '../log';
 import { Manifest } from '../manifest';
-import * as path from 'path';
 import { getVersion } from '../version';
 
 async function* parseDirectory(basePath: string, currentPath: string[]): AsyncGenerator<string> {
@@ -38,20 +38,16 @@ export class CreateManifest extends Command {
       return;
     }
 
-    const manifest: Manifest = {
-      path: inputPath,
-      size: 0,
-      files: [],
-    };
-
+    const manifest: Manifest = { path: inputPath, size: 0, files: [] };
     const pathReg = new RegExp('\\' + path.sep, 'g');
 
     for await (const fileName of parseDirectory(inputPath, [])) {
       const stat = await fs.stat(path.join(inputPath, fileName));
       manifest.size += stat.size;
       manifest.files.push({ path: fileName, size: stat.size });
-      if (manifest.files.length % 1000 === 0)
-        logger.debug({ count: manifest.files.length, path: fileName }, 'Progress');
+      if (manifest.files.length % 1000 === 0) {
+        logger.debug({ count: manifest.files.length, path: fileName }, 'Manifest:Progress');
+      }
     }
 
     const outputFile = args.inputFile.replace(pathReg, '_') + '.json';

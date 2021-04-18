@@ -1,10 +1,9 @@
 import Command, { flags } from '@oclif/command';
-import { existsSync, promises as fs } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import { hashFile } from '../hash';
 import { logger } from '../log';
-import { Manifest } from '../manifest';
+import { ManifestLoader } from '../manifest.loader';
 import { getVersion } from '../version';
 
 const Q = pLimit(5);
@@ -29,20 +28,14 @@ export class ValidateManifest extends Command {
     }
 
     if (!flags.local && !flags.remote) flags.local = true;
-    let manifestFile = args.inputFile;
-    if (existsSync(manifestFile + '.1')) manifestFile = manifestFile + '.1';
-    const manifest = JSON.parse((await fs.readFile(manifestFile)).toString()) as Manifest;
+    const manifest = await ManifestLoader.load(args.inputFile);
 
     const promises = [];
-    const stats = {
-      hashMissing: 0,
-      hashMissMatch: 0,
-      count: 0,
-    };
-    for (const file of manifest.files) {
+    const stats = { hashMissing: 0, hashMissMatch: 0, count: 0 };
+    for (const file of manifest.files.values()) {
       if (file.hash == null) {
         stats.hashMissing++;
-        return;
+        continue;
       }
       promises.push(
         Q(async () => {
@@ -54,7 +47,7 @@ export class ValidateManifest extends Command {
           }
 
           stats.count++;
-          if (stats.count % 1_000) logger.debug({ count: stats.count, total: manifest.files.length }, 'Hash:Progress');
+          if (stats.count % 1_000) logger.info({ count: stats.count, total: manifest.files.size }, 'Hash:Progress');
         }),
       );
     }

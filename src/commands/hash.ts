@@ -1,12 +1,11 @@
 import Command, { flags } from '@oclif/command';
-import { existsSync, promises as fs } from 'fs';
+import { promises as fs } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import { hashFile } from '../hash';
 import { logger } from '../log';
-import { Manifest } from '../manifest';
+import { ManifestLoader } from '../manifest.loader';
 import { getVersion } from '../version';
-import { watchManifest } from './sync';
 
 const Q = pLimit(5);
 
@@ -23,24 +22,21 @@ export class HashManifest extends Command {
 
     logger.info(getVersion(), 'Hash:Start');
 
-    let manifestFile = args.inputFile;
-    if (existsSync(manifestFile + '.1')) manifestFile = manifestFile + '.1';
+    const manifest = await ManifestLoader.load(args.inputFile);
 
-    const manifest = JSON.parse((await fs.readFile(manifestFile)).toString()) as Manifest;
-
-    const toHash = manifest.files.filter((f) => f.hash == null);
+    const toHash = manifest.filter((f) => f.hash == null);
     if (toHash.length === 0) {
-      logger.info('AllFilesHashed');
+      logger.info({ total: manifest.files.size }, 'AllFilesHashed');
       return;
     }
-    watchManifest(args.inputFile, manifest);
+    logger.debug({ total: toHash.length }, 'Hash:File');
 
     const promises = [];
     let count = 0;
     for (const file of toHash) {
       promises.push(
         Q(async () => {
-          logger.debug({ file }, 'Hash:File');
+          logger.debug({ count, total: toHash.length, file }, 'Hash:File');
           const filePath = path.join(manifest.path, file.path);
           file.hash = await hashFile(filePath);
           count++;
@@ -52,7 +48,7 @@ export class HashManifest extends Command {
 
     await Promise.all(promises);
 
-    await fs.writeFile(manifestFile, JSON.stringify(manifest, null, 2));
-    logger.info({ path: manifestFile, count: manifest.files.length }, 'Manifest:Hashed');
+    await fs.writeFile(args.inputFile, JSON.stringify(manifest.toJson(), null, 2));
+    logger.info({ path: args.inputFile, count: manifest.files.size }, 'Manifest:Hashed');
   }
 }
