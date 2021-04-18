@@ -8,7 +8,7 @@ import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
-import { ManifestFile } from '../manifest';
+import { Manifest, ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
@@ -48,6 +48,7 @@ const S3UploadOptions = {
 };
 
 let Q = pLimit(5);
+let client: S3;
 
 export class SnowballSync extends Command {
   static flags = {
@@ -71,7 +72,7 @@ export class SnowballSync extends Command {
     let endpoint = flags.endpoint;
     if (endpoint != null && !endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
     if (endpoint) logger.info({ endpoint }, 'SettingS3 Endpoint');
-    const client = new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true });
+    client = new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true });
 
     if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
 
@@ -95,9 +96,9 @@ export class SnowballSync extends Command {
     watchStats();
 
     // Upload larger files
-    await uploadBigFiles(client, manifest.path, bigFiles, target);
+    await uploadBigFiles(manifest, bigFiles, target);
     // Tar small files and upload them
-    await uploadSmallFiles(client, manifest.path, smallFiles, target);
+    await uploadSmallFiles(manifest, smallFiles, target);
     const manifestJson = manifest.toJsonString();
     // Upload the manifest
     await client
@@ -127,7 +128,7 @@ function watchStats(): void {
   logInterval.unref();
 }
 
-async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
+async function uploadBigFiles(m: ManifestLoader, files: ManifestFile[], target: BucketKey): Promise<void> {
   const log = logger.child({ type: 'big' });
   let promises: Promise<unknown>[] = [];
 
@@ -140,8 +141,9 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
   for (let index = startIndex; index < files.length; index++) {
     const file = files[index];
     const p = Q(async () => {
+      // Hash the file while uploading
       const hash = createHash('sha256');
-      const fileStream = createReadStream(path.join(root, file.path));
+      const fileStream = createReadStream(path.join(m.path, file.path));
       fileStream.on('data', (chunk) => hash.update(chunk));
 
       const uploadCtx = {
@@ -158,7 +160,7 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
       await client.upload(uploadCtx, S3UploadOptions).promise();
       Stats.count++;
       Stats.size += file.size;
-      file.hash = 'sha256-' + hash.digest('base64');
+      m.setHash(file.path, 'sha256-' + hash.digest('base64'));
     });
 
     promises.push(p);
@@ -172,7 +174,7 @@ async function uploadBigFiles(client: S3, root: string, files: ManifestFile[], t
   await Promise.all(promises);
 }
 
-async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[], target: BucketKey): Promise<void> {
+async function uploadSmallFiles(m: ManifestLoader, files: ManifestFile[], target: BucketKey): Promise<void> {
   let log = logger.child({ type: 'tar' });
 
   let tarIndex = 0;
@@ -199,7 +201,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
     let tarCount = 0;
     const promises = chunk.map((file) => {
       return Q(async () => {
-        const filePath = path.join(root, file.path);
+        const filePath = path.join(m.path, file.path);
         const buffer = await fs.readFile(filePath);
 
         const fileHash = createHash('sha256').update(buffer).digest('base64');
@@ -208,7 +210,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
 
         tarCount++;
         totalSize += file.size;
-        file.hash = 'sha256-' + fileHash;
+        m.setHash(file.path, 'sha256-' + fileHash);
       });
     });
 
@@ -222,7 +224,7 @@ async function uploadSmallFiles(client: S3, root: string, files: ManifestFile[],
       Key: targetFileName,
       Body: passStream,
       Metadata: {
-        'snowball-auto-extract': 'true',
+        'snowball-auto-extract': 'true', // Auto extract the tar file once its uploaded to s3
       },
     };
     await client.upload(uploadCtx, S3UploadOptions).promise();
