@@ -8,7 +8,7 @@ import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
-import { Manifest, ManifestFile } from '../manifest';
+import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { BucketKey, s3Util } from '../s3';
 import { getVersion } from '../version';
@@ -160,6 +160,7 @@ async function uploadBigFiles(m: ManifestLoader, files: ManifestFile[], target: 
       await client.upload(uploadCtx, S3UploadOptions).promise();
       Stats.count++;
       Stats.size += file.size;
+      Stats.progressSize += file.size;
       m.setHash(file.path, 'sha256-' + hash.digest('base64'));
     });
 
@@ -230,6 +231,7 @@ async function uploadSmallFiles(m: ManifestLoader, files: ManifestFile[], target
     await client.upload(uploadCtx, S3UploadOptions).promise();
     await tarPromise;
     Stats.size += totalSize;
+    Stats.progressSize += totalSize;
     Stats.count += chunk.length;
   }
 }

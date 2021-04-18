@@ -12,6 +12,7 @@ export class ManifestLoader {
   constructor(sourcePath: string, manifest: Manifest) {
     this.sourcePath = sourcePath;
     this.path = manifest.path;
+    this.size = manifest.size;
     for (const file of manifest.files) this.files.set(file.path, file);
   }
 
