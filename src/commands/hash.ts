@@ -12,6 +12,7 @@ const Q = pLimit(5);
 export class HashManifest extends Command {
   static flags = {
     verbose: flags.boolean({ description: 'verbose logging' }),
+    force: flags.boolean({ description: 'Force rehash all files' }),
   };
 
   static args = [{ name: 'inputFile', required: true }];
@@ -24,9 +25,10 @@ export class HashManifest extends Command {
 
     const manifest = await ManifestLoader.load(args.inputFile);
 
-    const toHash = manifest.filter((f) => f.hash == null);
+    const toHash = flags.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
     if (toHash.length === 0) {
-      logger.info({ total: manifest.files.size }, 'AllFilesHashed');
+      await fs.writeFile(args.inputFile, manifest.toJsonString());
+      logger.info({ path: args.inputFile, total: manifest.files.size }, 'Hash:Done');
       return;
     }
     logger.debug({ total: toHash.length }, 'Hash:File');
@@ -38,17 +40,17 @@ export class HashManifest extends Command {
         Q(async () => {
           logger.debug({ count, total: toHash.length, file }, 'Hash:File');
           const filePath = path.join(manifest.path, file.path);
-          file.hash = await hashFile(filePath);
+          const hash = await hashFile(filePath);
+          manifest.setHash(file.path, hash);
           count++;
-
-          if (count % 1_000) logger.info({ count, total: toHash.length }, 'Hash:Progress');
+          if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
         }),
       );
     }
 
     await Promise.all(promises);
 
-    await fs.writeFile(args.inputFile, JSON.stringify(manifest.toJson(), null, 2));
-    logger.info({ path: args.inputFile, count: manifest.files.size }, 'Manifest:Hashed');
+    await fs.writeFile(args.inputFile, manifest.toJsonString());
+    logger.info({ path: args.inputFile, count: manifest.files.size }, 'Hash:Done');
   }
 }

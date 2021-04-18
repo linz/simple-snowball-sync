@@ -46,12 +46,15 @@ export class CreateManifest extends Command {
       manifest.size += stat.size;
       manifest.files.push({ path: fileName, size: stat.size });
       if (manifest.files.length % 1000 === 0) {
-        logger.debug({ count: manifest.files.length, path: fileName }, 'Manifest:Progress');
+        logger.info({ count: manifest.files.length, path: fileName }, 'Manifest:Progress');
       }
     }
 
-    const outputFile = args.inputFile.replace(pathReg, '_') + '.json';
-    await fs.writeFile(outputFile, JSON.stringify(manifest, null, 2));
-    logger.info({ path: outputFile, count: manifest.files.length }, 'Manifest:Created');
+    let manifestName = args.inputFile;
+    if (manifestName.startsWith(path.sep)) manifestName = manifestName.slice(1);
+    if (manifestName.endsWith(path.sep)) manifestName = manifestName.slice(0, manifestName.length - 1);
+    manifestName = manifestName.replace(pathReg, '_').replace(/ /g, '_') + '.manifest.json';
+    await fs.writeFile(manifestName, JSON.stringify(manifest, null, 2));
+    logger.info({ path: manifestName, count: manifest.files.length }, 'Manifest:Created');
   }
 }

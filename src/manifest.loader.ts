@@ -16,8 +16,9 @@ export class ManifestLoader {
   }
 
   static async load(fileName: string): Promise<ManifestLoader> {
+    if (!fileName.endsWith('.json')) throw new Error('Invalid manifest path ' + fileName);
     let sourceFile = fileName;
-    if (existsSync(fileName + '.1')) sourceFile = fileName + '.1';
+    if (existsSync(fileName + '.bak')) sourceFile = fileName + '.bak';
     const buf = await fs.readFile(sourceFile);
 
     const manifest: Manifest = JSON.parse(buf.toString());
@@ -35,9 +36,7 @@ export class ManifestLoader {
 
   filter(f: (f: ManifestFile) => boolean): ManifestFile[] {
     const output: ManifestFile[] = [];
-    for (const file of this.files.values()) {
-      if (f(file)) output.push(file);
-    }
+    for (const file of this.files.values()) if (f(file)) output.push(file);
     return output;
   }
 
@@ -50,6 +49,7 @@ export class ManifestLoader {
       await fs.writeFile(this.sourcePath + '.1', JSON.stringify(this.toJson(), null, 2));
       logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);
+    this._dirtyTimeout.unref();
   }
 
   toJson(): Manifest {

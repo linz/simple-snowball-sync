@@ -47,7 +47,9 @@ export class ValidateManifest extends Command {
           }
 
           stats.count++;
-          if (stats.count % 1_000) logger.info({ count: stats.count, total: manifest.files.size }, 'Hash:Progress');
+          if (stats.count % 1_000 === 0) {
+            logger.info({ count: stats.count, total: manifest.files.size }, 'Hash:Progress');
+          }
         }),
       );
     }
