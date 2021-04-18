@@ -6,6 +6,7 @@ import { hashFile } from '../hash';
 import { logger } from '../log';
 import { Manifest } from '../manifest';
 import { getVersion } from '../version';
+import { watchManifest } from './sync';
 
 const Q = pLimit(5);
 
@@ -32,6 +33,7 @@ export class HashManifest extends Command {
       logger.info('AllFilesHashed');
       return;
     }
+    watchManifest(args.inputFile, manifest);
 
     const promises = [];
     let count = 0;

@@ -3,21 +3,12 @@ import { createHash } from 'crypto';
 import { createReadStream, existsSync, promises as fs } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
+import { hashFile } from '../hash';
 import { logger } from '../log';
 import { Manifest } from '../manifest';
 import { getVersion } from '../version';
 
 const Q = pLimit(5);
-
-async function hashFile(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash('sha256');
-    const stream = createReadStream(filePath);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(`sha256-${hash.digest('base64')}`));
-    stream.on('error', (err) => reject(err));
-  });
-}
 
 export class ValidateManifest extends Command {
   static flags = {

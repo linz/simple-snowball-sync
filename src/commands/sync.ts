@@ -115,7 +115,7 @@ export class SnowballSync extends Command {
 }
 
 /** Every 30 seconds write out where we are upto */
-function watchManifest(path: string, manifest: Manifest): void {
+export function watchManifest(path: string, manifest: Manifest): void {
   const current = JSON.stringify(manifest);
   const logInterval = setInterval(async () => {
     const startTime = Date.now();
