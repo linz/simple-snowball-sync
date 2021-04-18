@@ -1,6 +1,5 @@
 import Command, { flags } from '@oclif/command';
-import { createHash } from 'crypto';
-import { createReadStream, existsSync, promises as fs } from 'fs';
+import { existsSync, promises as fs } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import { hashFile } from '../hash';
