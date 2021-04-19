@@ -1,5 +1,6 @@
 import Command, { flags } from '@oclif/command';
 import { promises as fs } from 'fs';
+import { createReadStream } from 'fs';
 import pLimit from 'p-limit';
 import * as path from 'path';
 import { hashFile } from '../hash';
@@ -40,7 +41,7 @@ export class HashManifest extends Command {
         Q(async () => {
           logger.debug({ count, total: toHash.length, file }, 'Hash:File');
           const filePath = path.join(manifest.path, file.path);
-          const hash = await hashFile(filePath);
+          const hash = await hashFile(createReadStream(filePath));
           manifest.setHash(file.path, hash);
           count++;
           if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
