@@ -33,7 +33,8 @@ export class ValidateManifest extends Command {
     const percent = flags.sample / 100;
     const toVerify = manifest.filter((f) => f.size > 1024 * 1024 && Math.random() > percent);
     logger.info({ percent: flags.sample, count: toVerify.length }, 'Validate:Files');
-    for (const file of toVerify) {
+    for (let i = 0; i < toVerify.length; i++) {
+      const file = toVerify[i];
       if (file.hash == null) {
         stats.hashMissing++;
         continue;
@@ -46,9 +47,9 @@ export class ValidateManifest extends Command {
 
           if (file.hash !== hash) {
             stats.hashMissMatch++;
-            logger.warn({ path: filePath, expected: file.hash, got: hash }, 'Validate:Missmatch');
+            logger.warn({ index: i, path: filePath, expected: file.hash, got: hash }, 'Validate:Mismatch');
           } else {
-            logger.debug({ filePath, size: file.size, hash: file.hash }, 'Validate:File');
+            logger.debug({ index: i, filePath, size: file.size, hash: file.hash }, 'Validate:File');
           }
 
           stats.count++;
