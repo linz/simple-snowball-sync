@@ -32,7 +32,7 @@ export class ValidateManifest extends Command {
     const stats = { hashMissing: 0, hashMissMatch: 0, count: 0 };
     const percent = Number(flags.sample) / 100;
     if (isNaN(percent)) throw new Error('--sample is not a number');
-    const toVerify = manifest.filter((f) => f.size > 1024 * 1024 && Math.random() < percent);
+    const toVerify = manifest.filter(() => Math.random() < percent);
     logger.info({ percent: flags.sample, count: toVerify.length }, 'Validate:Files');
     for (let i = 0; i < toVerify.length; i++) {
       const file = toVerify[i];
