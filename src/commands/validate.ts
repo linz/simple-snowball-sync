@@ -13,7 +13,7 @@ export class ValidateManifest extends Command {
   static flags = {
     verbose: flags.boolean({ description: 'verbose logging' }),
     target: flags.string({ description: 's3 location to validate' }),
-    sample: flags.integer({ description: 'Percentage of files to check', default: 1 }),
+    sample: flags.string({ description: 'Percentage of files to check', default: '1' }),
   };
 
   static args = [{ name: 'inputFile', required: true }];
@@ -30,7 +30,8 @@ export class ValidateManifest extends Command {
 
     const promises = [];
     const stats = { hashMissing: 0, hashMissMatch: 0, count: 0 };
-    const percent = flags.sample / 100;
+    const percent = Number(flags.sample) / 100;
+    if (isNaN(percent)) throw new Error('--sample is not a number');
     const toVerify = manifest.filter((f) => f.size > 1024 * 1024 && Math.random() < percent);
     logger.info({ percent: flags.sample, count: toVerify.length }, 'Validate:Files');
     for (let i = 0; i < toVerify.length; i++) {
