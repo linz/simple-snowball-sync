@@ -31,7 +31,7 @@ export class ValidateManifest extends Command {
     const promises = [];
     const stats = { hashMissing: 0, hashMissMatch: 0, count: 0 };
     const percent = flags.sample / 100;
-    const toVerify = manifest.filter((f) => f.size > 1024 * 1024 && Math.random() > percent);
+    const toVerify = manifest.filter((f) => f.size > 1024 * 1024 && Math.random() < percent);
     logger.info({ percent: flags.sample, count: toVerify.length }, 'Validate:Files');
     for (let i = 0; i < toVerify.length; i++) {
       const file = toVerify[i];
