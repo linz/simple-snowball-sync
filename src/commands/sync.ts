@@ -72,6 +72,10 @@ export class SnowballSync extends Command {
     let endpoint = flags.endpoint;
     if (endpoint != null && !endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
     if (endpoint) logger.info({ endpoint }, 'SettingS3 Endpoint');
+
+    // Only use tar compression if uploading to a snowball
+    if (endpoint == null) flags.filter = -1;
+
     client = new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true });
 
     if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
