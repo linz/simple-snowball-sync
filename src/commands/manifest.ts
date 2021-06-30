@@ -1,60 +1,53 @@
-import { Command, flags } from '@oclif/command';
+import { fsa, FsS3 } from '@linzjs/s3fs';
+import { Command } from '@oclif/command';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { logger } from '../log';
-import { Manifest } from '../manifest';
+import { ManifestLoader } from '../manifest.loader';
+import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
-
-async function* parseDirectory(basePath: string, currentPath: string[]): AsyncGenerator<string> {
-  const currentFolder = path.join(basePath, ...currentPath);
-
-  const files = await fs.readdir(currentFolder, { withFileTypes: true });
-  for (const file of files) {
-    if (file.isDirectory()) {
-      yield* parseDirectory(basePath, [...currentPath, file.name]);
-    } else {
-      yield path.join(...currentPath, file.name);
-    }
-  }
-}
 
 export class CreateManifest extends Command {
   static flags = {
-    verbose: flags.boolean({ description: 'verbose logging' }),
+    endpoint: SnowballArgs.endpoint,
+    verbose: SnowballArgs.verbose,
   };
 
   static args = [{ name: 'inputFile', required: true }];
 
+  async parseInputPath(input: string): Promise<string | null> {
+    if (input.startsWith('s3://')) {
+      const res = FsS3.parse(input);
+      if (res == null) return null;
+      return input;
+    }
+    const fullPath = path.resolve(input);
+    const stat = await fs.stat(fullPath);
+    if (!stat.isDirectory()) {
+      logger.error({ path: fullPath }, 'Base path is not a folder');
+      return null;
+    }
+    return fullPath;
+  }
+
   async run(): Promise<void> {
     const { args, flags } = this.parse(CreateManifest);
-    if (flags.verbose) logger.level = 'debug';
-
+    registerSnowball(flags);
     logger.info(getVersion(), 'Manifest:Start');
 
-    const inputPath = path.resolve(args.inputFile);
-    const stat = await fs.stat(inputPath);
-    if (!stat.isDirectory()) {
-      logger.error({ path: inputPath }, 'Base path is not a folder');
-      return;
-    }
+    const inputPath = await this.parseInputPath(args.inputFile);
+    if (inputPath == null) return;
 
-    const manifest: Manifest = { path: inputPath, size: 0, files: [] };
     const pathReg = new RegExp('\\' + path.sep, 'g');
-
-    for await (const fileName of parseDirectory(inputPath, [])) {
-      const stat = await fs.stat(path.join(inputPath, fileName));
-      manifest.size += stat.size;
-      manifest.files.push({ path: fileName, size: stat.size });
-      if (manifest.files.length % 1000 === 0) {
-        logger.info({ count: manifest.files.length, path: fileName }, 'Manifest:Progress');
-      }
-    }
 
     let manifestName = args.inputFile;
     if (manifestName.startsWith(path.sep)) manifestName = manifestName.slice(1);
     if (manifestName.endsWith(path.sep)) manifestName = manifestName.slice(0, manifestName.length - 1);
-    manifestName = manifestName.replace(pathReg, '_').replace(/ /g, '_') + '.manifest.json';
-    await fs.writeFile(manifestName, JSON.stringify(manifest, null, 2));
-    logger.info({ path: manifestName, count: manifest.files.length }, 'Manifest:Created');
+    manifestName = manifestName.replace(pathReg, '_').replace(/ /g, '_').replace(':', '') + '.manifest.json';
+
+    const manifest = await ManifestLoader.create(manifestName, inputPath);
+
+    await fsa.write(manifestName, Buffer.from((await manifest).toJsonString()));
+    logger.info({ path: manifestName, count: manifest.files.size }, 'Manifest:Created');
   }
 }

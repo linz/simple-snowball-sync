@@ -1,22 +1,21 @@
-import { S3Fs } from '@linzjs/s3fs';
+import { fsa } from '@linzjs/s3fs';
 import Command, { flags } from '@oclif/command';
 import pLimit from 'p-limit';
 import { hashFile } from '../hash';
 import { logger } from '../log';
 import { ManifestLoader } from '../manifest.loader';
+import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
-const s3 = new S3Fs();
 
 const Q = pLimit(5);
 
 export class ValidateManifest extends Command {
   static flags = {
-    verbose: flags.boolean({ description: 'verbose logging' }),
-    target: flags.string({ description: 's3 location to validate' }),
+    ...SnowballArgs,
     sample: flags.string({ description: 'Percentage of files to check', default: '1' }),
   };
 
-  static args = [{ name: 'inputFile', required: true }];
+  static args = [{ name: 'manifest', required: true }];
 
   async run(): Promise<void> {
     const { args, flags } = this.parse(ValidateManifest);
@@ -24,10 +23,34 @@ export class ValidateManifest extends Command {
 
     logger.info(getVersion(), 'Validate:Start');
 
-    const manifest = await ManifestLoader.load(args.inputFile);
+    registerSnowball(flags);
+
+    const manifest = await ManifestLoader.load(args.manifest);
 
     const sourcePath = flags.target ?? manifest.path;
 
+    // Validate all the files exist
+    logger.info('Validate:FileList');
+    const expectedFiles = new Map(manifest.files);
+    const targetManifest = await ManifestLoader.create('/never', sourcePath);
+
+    for (const file of targetManifest.files.values()) {
+      if (expectedFiles.has(file.path)) {
+        const expected = expectedFiles.get(file.path);
+        if (expected?.size !== file.size) logger.error({ file, expected }, 'FileSizeMissmatch');
+        expectedFiles.delete(file.path);
+      } else {
+        if (file.path === 'manifest.json') continue;
+        logger.error({ file }, 'ExtraFileFound');
+      }
+    }
+    if (expectedFiles.size > 0) {
+      logger.fatal({ missing: expectedFiles }, 'Validate:FileList:Failed');
+      return;
+    }
+    logger.info({ files: targetManifest.files.size }, 'Validate:FileList:Ok');
+
+    // Validate the contents
     const promises = [];
     const stats = { hashMissing: 0, hashMissMatch: 0, count: 0 };
     const percent = Number(flags.sample) / 100;
@@ -42,8 +65,8 @@ export class ValidateManifest extends Command {
       }
       promises.push(
         Q(async () => {
-          const filePath = s3.join(sourcePath, file.path);
-          const stream = s3.readStream(filePath);
+          const filePath = fsa.join(sourcePath, file.path);
+          const stream = fsa.readStream(filePath);
           const hash = await hashFile(stream);
 
           if (file.hash !== hash) {

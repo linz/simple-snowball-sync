@@ -1,3 +1,4 @@
+import { fsa } from '@linzjs/s3fs';
 import { existsSync, promises as fs } from 'fs';
 import { logger } from './log';
 import { Manifest, ManifestFile } from './manifest';
@@ -20,10 +21,23 @@ export class ManifestLoader {
     if (!fileName.endsWith('.json')) throw new Error('Invalid manifest path ' + fileName);
     let sourceFile = fileName;
     if (existsSync(fileName + '.bak')) sourceFile = fileName + '.bak';
-    const buf = await fs.readFile(sourceFile);
+    const buf = await fsa.read(sourceFile);
 
     const manifest: Manifest = JSON.parse(buf.toString());
     return new ManifestLoader(fileName, manifest);
+  }
+
+  static async create(outputPath: string, inputPath: string): Promise<ManifestLoader> {
+    const manifest: Manifest = { path: inputPath, size: 0, files: [] };
+    for await (const rec of fsa.listDetails(inputPath)) {
+      if (rec.size == null || rec.size === 0) continue;
+      manifest.size += rec.size;
+      manifest.files.push({ path: rec.path.slice(inputPath.length), size: rec.size });
+      if (manifest.files.length % 1_000 === 0) {
+        logger.info({ count: manifest.files.length, path: rec.path }, 'Manifest:Progress');
+      }
+    }
+    return new ManifestLoader(outputPath, manifest);
   }
 
   setHash(path: string, hash: string): void {

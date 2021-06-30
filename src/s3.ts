@@ -1,23 +1,11 @@
-import path from 'path';
-import { ManifestFile } from './manifest';
-import type S3 from 'aws-sdk/clients/s3';
+import { fsa } from '@linzjs/s3fs';
 import { LogType } from './log';
+import { ManifestFile } from './manifest';
 
 export type BucketKey = { key: string; bucket: string };
 
-function parse(uri?: string): BucketKey | null {
-  if (uri == null || !uri.startsWith('s3://')) return null;
-
-  const parts = uri.split('/');
-  const bucket = parts[2];
-  if (bucket == null || bucket.trim() === '') return null;
-  const key = parts.slice(3).join('/');
-  if (key == null || key.trim() === '') return null;
-  return { key, bucket };
-}
-
 const CheckRange = 5;
-async function findUploaded(client: S3, files: ManifestFile[], target: BucketKey, logger: LogType): Promise<number> {
+async function findUploaded(files: ManifestFile[], target: string, logger: LogType): Promise<number> {
   let foundUploaded = -1;
   let foundNotUploaded = -1;
   let count = 0;
@@ -27,12 +15,9 @@ async function findUploaded(client: S3, files: ManifestFile[], target: BucketKey
   while (low <= high) {
     const mid = (low + high) >>> 1;
     const file = files[mid];
-    const ctx = {
-      Bucket: target.bucket,
-      Key: path.join(target.key, file.path),
-    };
 
-    const found = await headObject(client, ctx);
+    const filePath = fsa.join(target, file.path);
+    const found = await fsa.exists(filePath);
     const exists = found !== false;
     if (exists) {
       if (mid > foundUploaded) foundUploaded = mid;
@@ -42,7 +27,10 @@ async function findUploaded(client: S3, files: ManifestFile[], target: BucketKey
       high = mid - 1;
     }
 
-    logger.info({ index: mid, path: ctx.Key, exists, foundUploaded, foundNotUploaded, low, high }, 'LastUpload:Search');
+    logger.info(
+      { index: mid, path: filePath, exists, foundUploaded, foundNotUploaded, low, high },
+      'LastUpload:Search',
+    );
     count++;
     if (count > 50) break;
   }
@@ -53,31 +41,26 @@ async function findUploaded(client: S3, files: ManifestFile[], target: BucketKey
   const endIndex = Math.min(foundNotUploaded + CheckRange, files.length);
   for (let i = startIndex; i < endIndex; i++) {
     const file = files[i];
-    const ctx = { Bucket: target.bucket, Key: path.join(target.key, file.path) };
-    const head = await headObject(client, ctx);
+    const filePath = fsa.join(target, file.path);
+    const fileFound = await fsa.head(filePath);
+
     logger.debug(
-      { index: i, path: ctx.Key, exists: head !== true, sizeS3: head && head.ContentLength, sizeLocal: file.size },
+      {
+        index: i,
+        path: filePath,
+        exists: fileFound != null,
+        sizeS3: fileFound?.size,
+        sizeLocal: file.size,
+      },
       'LastUpload:SearchForComplete',
     );
 
-    if (head === false) return i;
-    if (head.ContentLength !== file.size) return i;
+    if (fileFound == null) return i;
+    if (fileFound.size !== file.size) return i;
   }
   throw new Error('Failed');
 }
 
-function headObject(client: S3, ctx: { Bucket: string; Key: string }): Promise<S3.HeadObjectOutput | false> {
-  return client
-    .headObject(ctx)
-    .promise()
-    .catch((e) => {
-      if (e.code === 'NotFound') return false;
-      throw e;
-    });
-}
-
 export const s3Util = {
-  parse,
-  head: headObject,
   findUploaded,
 };
