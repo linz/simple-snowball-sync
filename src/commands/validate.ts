@@ -27,12 +27,12 @@ export class ValidateManifest extends Command {
 
     const manifest = await ManifestLoader.load(args.manifest);
 
-    const sourcePath = flags.target ?? manifest.path;
+    const targetPath = flags.target ?? manifest.path;
 
     // Validate all the files exist
     logger.info('Validate:FileList');
     const expectedFiles = new Map(manifest.files);
-    const targetManifest = await ManifestLoader.create('/never', sourcePath);
+    const targetManifest = await ManifestLoader.create('/never', targetPath);
     const extraFiles = new Set<string>();
 
     for (const file of targetManifest.files.values()) {
@@ -48,12 +48,16 @@ export class ValidateManifest extends Command {
     }
     // Found extra files in the destination, not necessarily a problem
     if (extraFiles.size > 0) {
-      if (flags.verbose) for (const file of extraFiles) logger.warn({ path: file }, 'Validate:FileList:ExtraFile');
+      for (const file of extraFiles) {
+        logger.warn({ path: fsa.join(targetPath, file) }, 'Validate:FileList:ExtraFile');
+      }
       logger.error({ extra: extraFiles.size }, 'Validate:FileList:Extra');
     }
     // Missing files this is a big problem!
     if (expectedFiles.size > 0) {
-      for (const file of expectedFiles.keys()) logger.warn({ path: file }, 'Validate:FileList:Missing');
+      for (const file of expectedFiles.keys()) {
+        logger.warn({ path: fsa.join(targetPath, file) }, 'Validate:FileList:Missing');
+      }
       logger.fatal({ missing: expectedFiles.size }, 'Validate:FileList:Failed');
       return;
     }
@@ -75,7 +79,7 @@ export class ValidateManifest extends Command {
       }
       promises.push(
         Q(async () => {
-          const filePath = fsa.join(sourcePath, file.path);
+          const filePath = fsa.join(targetPath, file.path);
           const stream = fsa.readStream(filePath);
           const hash = await hashFile(stream);
 
