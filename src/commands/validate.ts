@@ -33,20 +33,29 @@ export class ValidateManifest extends Command {
     logger.info('Validate:FileList');
     const expectedFiles = new Map(manifest.files);
     const targetManifest = await ManifestLoader.create('/never', sourcePath);
+    const extraFiles = new Set<string>();
 
     for (const file of targetManifest.files.values()) {
       if (expectedFiles.has(file.path)) {
         const expected = expectedFiles.get(file.path);
-        if (expected?.size !== file.size) logger.error({ file, expected }, 'FileSizeMissmatch');
+        if (expected?.size !== file.size) logger.error({ file, expected }, 'Validate:FileList:FileSizeMissMatch');
         expectedFiles.delete(file.path);
       } else {
+        // Manifest files are a extra file that is added
         if (file.path === 'manifest.json') continue;
-        logger.error({ file }, 'ExtraFileFound');
+        extraFiles.add(file.path);
       }
     }
+    // Missing files this is a big problem!
     if (expectedFiles.size > 0) {
-      logger.fatal({ missing: expectedFiles }, 'Validate:FileList:Failed');
+      for (const file of expectedFiles.keys()) logger.warn({ path: file }, 'Validate:FileList:Missing');
+      logger.fatal({ missing: expectedFiles.size }, 'Validate:FileList:Failed');
       return;
+    }
+    // Found extra files in the destination, not necessarily a problem
+    if (extraFiles.size > 0) {
+      if (flags.verbose) for (const file of extraFiles) logger.warn({ path: file }, 'Validate:FileList:ExtraFile');
+      logger.error({ extra: extraFiles.size }, 'Validate:FileList:Extra');
     }
     logger.info({ files: targetManifest.files.size }, 'Validate:FileList:Ok');
 
