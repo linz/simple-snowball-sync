@@ -44,7 +44,7 @@ export class HashManifest extends Command {
           manifest.setHash(file.path, hash);
           count++;
           if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
-        }),
+        }).catch((error) => logger.error({ error, path: fsa.join(manifest.path, file.path) }, 'Hash:Failed')),
       );
     }
 

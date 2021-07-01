@@ -89,7 +89,7 @@ export class ValidateManifest extends Command {
           if (stats.count % 1_000 === 0) {
             logger.info({ count: stats.count, total: toVerify.length }, 'Validate:Progress');
           }
-        }),
+        }).catch((error) => logger.error({ error, path: fsa.join(manifest.path, file.path) }, 'Validate:Failed')),
       );
     }
 
