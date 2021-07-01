@@ -3,6 +3,8 @@ import { flags } from '@oclif/command';
 import S3 from 'aws-sdk/clients/s3';
 import { logger } from './log';
 
+FsS3.MaxListCount = 1_000; // Some folders are very large
+
 export const SnowballArgs = {
   verbose: flags.boolean({ description: 'Verbose logging' }),
   target: flags.string({ description: 'S3 location to store files' }),
