@@ -14,7 +14,10 @@ export class ManifestLoader {
     this.sourcePath = sourcePath;
     this.path = manifest.path;
     this.size = manifest.size;
-    for (const file of manifest.files) this.files.set(file.path, file);
+    for (const file of manifest.files) {
+      file.path = ManifestLoader.normalize(file.path);
+      this.files.set(file.path, file);
+    }
   }
 
   static async load(fileName: string): Promise<ManifestLoader> {
@@ -27,16 +30,31 @@ export class ManifestLoader {
     return new ManifestLoader(fileName, manifest);
   }
 
-  static async create(outputPath: string, inputPath: string): Promise<ManifestLoader> {
-    const manifest: Manifest = { path: inputPath, size: 0, files: [] };
+  /** Remove leading and trailing slashes */
+  static normalize(input: string): string {
+    if (input.startsWith('/')) input = input.slice(1);
+    if (input.endsWith('/')) input = input.slice(0, input.length - 1);
+    return input;
+  }
+
+  static async *list(inputPath: string): AsyncGenerator<ManifestFile> {
     for await (const rec of fsa.listDetails(inputPath)) {
       if (rec.size == null || rec.size === 0) continue;
+      const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
+      yield { path: filePath, size: rec.size };
+    }
+  }
+
+  static async create(outputPath: string, inputPath: string): Promise<ManifestLoader> {
+    const manifest: Manifest = { path: inputPath, size: 0, files: [] };
+    for await (const rec of this.list(inputPath)) {
       manifest.size += rec.size;
-      manifest.files.push({ path: rec.path.slice(inputPath.length), size: rec.size });
-      if (manifest.files.length % 1_000 === 0) {
+      manifest.files.push(rec);
+      if (manifest.files.length % 5_000 === 0) {
         logger.info({ count: manifest.files.length, path: rec.path }, 'Manifest:Progress');
       }
     }
+
     return new ManifestLoader(outputPath, manifest);
   }
 

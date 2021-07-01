@@ -40,10 +40,9 @@ export class CreateManifest extends Command {
 
     const pathReg = new RegExp('\\' + path.sep, 'g');
 
-    let manifestName = args.inputFile;
-    if (manifestName.startsWith(path.sep)) manifestName = manifestName.slice(1);
-    if (manifestName.endsWith(path.sep)) manifestName = manifestName.slice(0, manifestName.length - 1);
-    manifestName = manifestName.replace(pathReg, '_').replace(/ /g, '_').replace(':', '') + '.manifest.json';
+    const manifestName =
+      ManifestLoader.normalize(args.inputFile).replace(pathReg, '_').replace(/ /g, '_').replace(':', '') +
+      '.manifest.json';
 
     const manifest = await ManifestLoader.create(manifestName, inputPath);
 
