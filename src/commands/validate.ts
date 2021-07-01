@@ -46,17 +46,18 @@ export class ValidateManifest extends Command {
         extraFiles.add(file.path);
       }
     }
+    // Found extra files in the destination, not necessarily a problem
+    if (extraFiles.size > 0) {
+      if (flags.verbose) for (const file of extraFiles) logger.warn({ path: file }, 'Validate:FileList:ExtraFile');
+      logger.error({ extra: extraFiles.size }, 'Validate:FileList:Extra');
+    }
     // Missing files this is a big problem!
     if (expectedFiles.size > 0) {
       for (const file of expectedFiles.keys()) logger.warn({ path: file }, 'Validate:FileList:Missing');
       logger.fatal({ missing: expectedFiles.size }, 'Validate:FileList:Failed');
       return;
     }
-    // Found extra files in the destination, not necessarily a problem
-    if (extraFiles.size > 0) {
-      if (flags.verbose) for (const file of extraFiles) logger.warn({ path: file }, 'Validate:FileList:ExtraFile');
-      logger.error({ extra: extraFiles.size }, 'Validate:FileList:Extra');
-    }
+
     logger.info({ files: targetManifest.files.size }, 'Validate:FileList:Ok');
 
     // Validate the contents
