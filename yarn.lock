@@ -45,10 +45,10 @@
     minimatch "^3.0.4"
     strip-json-comments "^3.1.1"
 
-"@linzjs/s3fs@^6.1.0":
-  version "6.1.0"
-  resolved "https://registry.yarnpkg.com/@linzjs/s3fs/-/s3fs-6.1.0.tgz#6f004e97d7676f9a2c82f7b107d00cd793aad70a"
-  integrity sha512-vS8q3/Vag6r03IrMxP6ubGGH+bhSNn9Tm8H1g5QPl9UNMNmcGqOECZ1YCBCC4ufRa3yRczKtCvPQLjlRKS+AGw==
+"@linzjs/s3fs@^6.3.0":
+  version "6.3.0"
+  resolved "https://registry.yarnpkg.com/@linzjs/s3fs/-/s3fs-6.3.0.tgz#f4f6a535c2274fd5c3580b17dfa12e11090c0fd5"
+  integrity sha512-bjrPkDKIlORFaKVxhTIJN5E6v6vq1V4PR4L0gWCJDz+3RN1Z0IQk8UkXcpfaK2Xr2tLQMn6SEjH6ImiMBVdZog==
 
 "@linzjs/style@^2.1.4":
   version "2.1.4"
