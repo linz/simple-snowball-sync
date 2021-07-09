@@ -4,13 +4,14 @@ import { ManifestFile } from './manifest';
 
 export type BucketKey = { key: string; bucket: string };
 
-const CheckRange = 5;
-async function findUploaded(files: ManifestFile[], target: string, logger: LogType): Promise<number> {
+async function findUploaded(files: ManifestFile[], target: string, checkRange = 5, logger: LogType): Promise<number> {
   let foundUploaded = -1;
   let foundNotUploaded = -1;
   let count = 0;
   let low = 0;
   let high = files.length - 1;
+  // Double the range to be slightly safer
+  checkRange = checkRange * 2;
 
   while (low <= high) {
     const mid = (low + high) >>> 1;
@@ -37,8 +38,8 @@ async function findUploaded(files: ManifestFile[], target: string, logger: LogTy
 
   if (foundNotUploaded < 0) return files.length;
   if (foundUploaded < 0) return 0;
-  const startIndex = Math.max(0, foundUploaded - CheckRange);
-  const endIndex = Math.min(foundNotUploaded + CheckRange, files.length);
+  const startIndex = Math.max(0, foundUploaded - checkRange);
+  const endIndex = Math.min(foundNotUploaded + checkRange, files.length);
   for (let i = startIndex; i < endIndex; i++) {
     const file = files[i];
     const filePath = fsa.join(target, file.path);

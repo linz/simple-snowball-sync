@@ -6,18 +6,23 @@ import { Manifest, ManifestFile } from './manifest';
 export class ManifestLoader {
   files: Map<string, ManifestFile> = new Map();
   isDirty = false;
-  path: string;
+  dataPath: string;
   sourcePath: string;
   size: number;
 
   constructor(sourcePath: string, manifest: Manifest) {
     this.sourcePath = sourcePath;
-    this.path = manifest.path;
+    this.dataPath = manifest.path;
     this.size = manifest.size;
     for (const file of manifest.files) {
       file.path = ManifestLoader.normalize(file.path);
       this.files.set(file.path, file);
     }
+  }
+
+  file(fileName: string | ManifestFile): string {
+    if (typeof fileName === 'string') return fsa.join(this.dataPath, fileName);
+    return fsa.join(this.dataPath, fileName.path);
   }
 
   static async load(fileName: string): Promise<ManifestLoader> {
@@ -98,7 +103,7 @@ export class ManifestLoader {
       size += file.size;
     }
     return {
-      path: this.path,
+      path: this.dataPath,
       size,
       files,
     };

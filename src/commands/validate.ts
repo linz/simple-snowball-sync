@@ -27,7 +27,7 @@ export class ValidateManifest extends Command {
 
     const manifest = await ManifestLoader.load(args.manifest);
 
-    const targetPath = flags.target ?? manifest.path;
+    const targetPath = flags.target ?? manifest.dataPath;
 
     // Validate all the files exist
     logger.info('Validate:FileList');
@@ -94,7 +94,7 @@ export class ValidateManifest extends Command {
           if (stats.count % 1_000 === 0) {
             logger.info({ count: stats.count, total: toVerify.length }, 'Validate:Progress');
           }
-        }).catch((error) => logger.error({ error, path: fsa.join(manifest.path, file.path) }, 'Validate:Failed')),
+        }).catch((error) => logger.error({ error, path: manifest.file(file.path) }, 'Validate:Failed')),
       );
     }
 

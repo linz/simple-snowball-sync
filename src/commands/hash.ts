@@ -8,8 +8,6 @@ import { ManifestLoader } from '../manifest.loader';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
 
-const Q = pLimit(5);
-
 export class HashManifest extends Command {
   static flags = {
     verbose: SnowballArgs.verbose,
@@ -41,20 +39,18 @@ export class HashManifest extends Command {
   }
 }
 
-export async function hashFiles(toHash: ManifestFile[], manifest: ManifestLoader): Promise<void> {
-  const promises: Promise<unknown>[] = [];
+export async function hashFiles(toHash: ManifestFile[], manifest: ManifestLoader, Q = pLimit(5)): Promise<void> {
   let count = 0;
-  for (const file of toHash) {
-    promises.push(
-      Q(async () => {
-        logger.debug({ count, total: toHash.length, file }, 'Hash:File');
-        const filePath = fsa.join(manifest.path, file.path);
-        const hash = await hashFile(fsa.readStream(filePath));
-        manifest.setHash(file.path, hash);
-        count++;
-        if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
-      }).catch((error) => logger.error({ error, path: fsa.join(manifest.path, file.path) }, 'Hash:Failed')),
-    );
-  }
+
+  const promises = toHash.map((file) => {
+    return Q(async () => {
+      logger.debug({ count, total: toHash.length, file }, 'Hash:File');
+      const hash = await hashFile(fsa.readStream(manifest.file(file)));
+      manifest.setHash(file.path, hash);
+      count++;
+      if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
+    }).catch((error) => logger.error({ error, path: manifest.file(file) }, 'Hash:Failed'));
+  });
+
   await Promise.all(promises);
 }

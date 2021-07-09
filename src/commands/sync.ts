@@ -50,7 +50,6 @@ const S3UploadOptions = {
   partSize: 105 * OneMb,
 };
 
-let Q = pLimit(5);
 let client: S3;
 
 export class SnowballSync extends Command {
@@ -59,6 +58,10 @@ export class SnowballSync extends Command {
     concurrency: flags.integer({ description: 'Number of upload threads to run', default: 5 }),
     filter: flags.integer({ description: 'Use tar to sync files smaller than this (Mb)', default: 1 }),
   };
+
+  manifest: ManifestLoader;
+  concurrency: number;
+  Q: pLimit.Limit;
 
   static args = [{ name: 'manifest', required: true }];
   async run(): Promise<void> {
@@ -72,20 +75,21 @@ export class SnowballSync extends Command {
 
     // Only use tar compression if uploading to a snowball
     if (flags.endpoint == null) flags.filter = -1;
-    if (flags.concurrency !== 5) Q = pLimit(flags.concurrency);
 
     if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
 
-    const manifest = await ManifestLoader.load(args.manifest);
+    this.manifest = await ManifestLoader.load(args.manifest);
+    this.Q = pLimit(flags.concurrency);
+    this.concurrency = flags.concurrency;
 
-    Stats.totalFiles = manifest.files.size;
-    Stats.totalSize = manifest.size;
+    Stats.totalFiles = this.manifest.files.size;
+    Stats.totalSize = this.manifest.size;
 
     /** Filter files down to MB size */
     const filterSize = flags.filter * 1024 * 1024;
     const smallFiles: ManifestFile[] = [];
     const bigFiles: ManifestFile[] = [];
-    for (const file of manifest.files.values()) {
+    for (const file of this.manifest.files.values()) {
       if (file.size > filterSize) bigFiles.push(file);
       else smallFiles.push(file);
     }
@@ -94,21 +98,133 @@ export class SnowballSync extends Command {
     watchStats();
 
     // Upload larger files
-    await uploadBigFiles(manifest, bigFiles, target);
+    await this.uploadBigFiles(bigFiles, target);
     // Tar small files and upload them
-    await uploadSmallFiles(manifest, smallFiles, target);
-    const manifestJson = Buffer.from(manifest.toJsonString());
+    await this.uploadSmallFiles(smallFiles, target);
+    const manifestJson = Buffer.from(this.manifest.toJsonString());
     // Upload the manifest
     await fsa.write(fsa.join(target, 'manifest.json'), manifestJson);
     await fsa.write(args.manifest, manifestJson);
 
     // Force rehash any file that is missing a hash
-    const missingHashes = manifest.filter((f) => f.hash == null);
+    const missingHashes = this.manifest.filter((f) => f.hash == null);
     if (missingHashes.length > 0) {
       logger.warn({ count: missingHashes.length }, 'MissingHashes');
-      await hashFiles(missingHashes, manifest);
+      await hashFiles(missingHashes, this.manifest);
     }
     logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
+  }
+
+  async uploadBigFiles(files: ManifestFile[], target: string): Promise<void> {
+    const log = logger.child({ type: 'big' });
+    let promises: Promise<unknown>[] = [];
+
+    const { bucket, key } = FsS3.parse(target);
+
+    const startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
+    // Update the stats for where we started from
+    Stats.count += startIndex;
+    for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
+
+    log.info({ startOffset: startIndex, files: files.length }, 'Upload:Start');
+    for (let index = startIndex; index < files.length; index++) {
+      const file = files[index];
+      const p = this.Q(async () => {
+        // Hash the file while uploading
+        const hash = createHash('sha256');
+        const fileStream = fsa.readStream(this.manifest.file(file));
+        fileStream.on('data', (chunk) => hash.update(chunk));
+
+        const uploadCtx = {
+          Bucket: bucket,
+          Key: path.join(key ?? '', file.path),
+          Body: fileStream,
+        };
+        const targetUri = fsa.join(target, file.path);
+
+        log.debug(
+          { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
+          'Upload:Start',
+        );
+        await client.upload(uploadCtx, S3UploadOptions).promise();
+        Stats.count++;
+        Stats.size += file.size;
+        Stats.progressSize += file.size;
+        this.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
+      }).catch((error) => {
+        logger.error({ error, path: this.manifest.file(file) }, 'UploadFailed');
+        process.exit(1);
+      });
+
+      promises.push(p);
+      if (promises.length > 1000) {
+        logger.debug({ index }, 'Upload:Join');
+        await Promise.all(promises);
+        promises = [];
+      }
+    }
+
+    await Promise.all(promises);
+  }
+
+  async uploadSmallFiles(files: ManifestFile[], target: string): Promise<void> {
+    let log = logger.child({ type: 'tar' });
+    const { bucket, key } = FsS3.parse(target);
+
+    let tarIndex = 0;
+    for (const chunk of chunkSmallFiles(files)) {
+      const tarFileName = `batch-${tarIndex++}.tar.gz`;
+      const targetUri = fsa.join(target, tarFileName);
+      log = log.child({ target: targetUri });
+
+      const head = await fsa.exists(targetUri);
+      if (head) {
+        log.info('Tar:Exists');
+        continue;
+      }
+
+      const packer = tar.pack();
+      log.info({ files: chunk.length }, 'Tar:Start');
+      const tarPromise = new Promise((resolve) => packer.on('end', resolve));
+
+      const passStream = new PassThrough();
+      packer.pipe(createGzip()).pipe(passStream);
+
+      let totalSize = 0;
+      let tarCount = 0;
+      const promises = chunk.map((file) => {
+        return this.Q(async () => {
+          const buffer = await fsa.read(this.manifest.file(file));
+
+          const fileHash = createHash('sha256').update(buffer).digest('base64');
+          packer.entry({ name: file.path }, buffer);
+          if (tarCount % 1_000 === 0) log.debug({ tarCount, tarTotal: chunk.length }, 'Tar:Progress');
+
+          tarCount++;
+          totalSize += file.size;
+          this.manifest.setHash(file.path, 'sha256-' + fileHash);
+        });
+      });
+
+      await Promise.all(promises);
+
+      packer.finalize();
+
+      log.info({ count: Stats.count, total: Stats.totalFiles }, 'Upload:Start');
+      const uploadCtx = {
+        Bucket: bucket,
+        Key: fsa.join(key ?? '', tarFileName),
+        Body: passStream,
+        Metadata: {
+          'snowball-auto-extract': 'true', // Auto extract the tar file once its uploaded to s3
+        },
+      };
+      await client.upload(uploadCtx, S3UploadOptions).promise();
+      await tarPromise;
+      Stats.size += totalSize;
+      Stats.progressSize += totalSize;
+      Stats.count += chunk.length;
+    }
   }
 }
 
@@ -124,119 +240,6 @@ function watchStats(): void {
     logger.info({ count: Stats.count, percent, movedMb, speed }, 'Upload:Progress');
   }, 5000);
   logInterval.unref();
-}
-
-async function uploadBigFiles(m: ManifestLoader, files: ManifestFile[], target: string): Promise<void> {
-  const log = logger.child({ type: 'big' });
-  let promises: Promise<unknown>[] = [];
-
-  const { bucket, key } = FsS3.parse(target);
-
-  const startIndex = await s3Util.findUploaded(files, target, logger);
-  // Update the stats for where we started from
-  Stats.count += startIndex;
-  for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
-
-  log.info({ startOffset: startIndex, files: files.length }, 'Upload:Start');
-  for (let index = startIndex; index < files.length; index++) {
-    const file = files[index];
-    const p = Q(async () => {
-      // Hash the file while uploading
-      const hash = createHash('sha256');
-      const fileStream = fsa.readStream(fsa.join(m.path, file.path));
-      fileStream.on('data', (chunk) => hash.update(chunk));
-
-      const uploadCtx = {
-        Bucket: bucket,
-        Key: path.join(key ?? '', file.path),
-        Body: fileStream,
-      };
-      const targetUri = fsa.join(target, file.path);
-
-      log.debug(
-        { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
-        'Upload:Start',
-      );
-      await client.upload(uploadCtx, S3UploadOptions).promise();
-      Stats.count++;
-      Stats.size += file.size;
-      Stats.progressSize += file.size;
-      m.setHash(file.path, 'sha256-' + hash.digest('base64'));
-    }).catch((error) => {
-      logger.error({ error, path: fsa.join(m.path, file.path) }, 'UploadFailed');
-      process.exit(1);
-    });
-
-    promises.push(p);
-    if (promises.length > 1000) {
-      logger.debug({ index }, 'Upload:Join');
-      await Promise.all(promises);
-      promises = [];
-    }
-  }
-
-  await Promise.all(promises);
-}
-
-async function uploadSmallFiles(m: ManifestLoader, files: ManifestFile[], target: string): Promise<void> {
-  let log = logger.child({ type: 'tar' });
-  const { bucket, key } = FsS3.parse(target);
-
-  let tarIndex = 0;
-  for (const chunk of chunkSmallFiles(files)) {
-    const tarFileName = `batch-${tarIndex++}.tar.gz`;
-    const targetUri = fsa.join(target, tarFileName);
-    log = log.child({ target: targetUri });
-
-    const head = await fsa.exists(targetUri);
-    if (head) {
-      log.info('Tar:Exists');
-      continue;
-    }
-
-    const packer = tar.pack();
-    log.info({ files: chunk.length }, 'Tar:Start');
-    const tarPromise = new Promise((resolve) => packer.on('end', resolve));
-
-    const passStream = new PassThrough();
-    packer.pipe(createGzip()).pipe(passStream);
-
-    let totalSize = 0;
-    let tarCount = 0;
-    const promises = chunk.map((file) => {
-      return Q(async () => {
-        const filePath = fsa.join(m.path, file.path);
-        const buffer = await fsa.read(filePath);
-
-        const fileHash = createHash('sha256').update(buffer).digest('base64');
-        packer.entry({ name: file.path }, buffer);
-        if (tarCount % 1_000 === 0) log.debug({ tarCount, tarTotal: chunk.length }, 'Tar:Progress');
-
-        tarCount++;
-        totalSize += file.size;
-        m.setHash(file.path, 'sha256-' + fileHash);
-      });
-    });
-
-    await Promise.all(promises);
-
-    packer.finalize();
-
-    log.info({ count: Stats.count, total: Stats.totalFiles }, 'Upload:Start');
-    const uploadCtx = {
-      Bucket: bucket,
-      Key: fsa.join(key ?? '', tarFileName),
-      Body: passStream,
-      Metadata: {
-        'snowball-auto-extract': 'true', // Auto extract the tar file once its uploaded to s3
-      },
-    };
-    await client.upload(uploadCtx, S3UploadOptions).promise();
-    await tarPromise;
-    Stats.size += totalSize;
-    Stats.progressSize += totalSize;
-    Stats.count += chunk.length;
-  }
 }
 
 /** Chunk small files into 10,000 file or 1GB chunks which ever occurs first*/
