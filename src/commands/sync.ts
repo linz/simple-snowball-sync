@@ -7,12 +7,14 @@ import * as path from 'path';
 import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
+import { hashFile } from '../hash';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
+import { hashFiles } from './hash';
 
 const Stats = {
   /** Files uploaded over all runs */
@@ -99,6 +101,13 @@ export class SnowballSync extends Command {
     // Upload the manifest
     await fsa.write(fsa.join(target, 'manifest.json'), manifestJson);
     await fsa.write(args.manifest, manifestJson);
+
+    // Force rehash any file that is missing a hash
+    const missingHashes = manifest.filter((f) => f.hash == null);
+    if (missingHashes.length > 0) {
+      logger.warn({ count: missingHashes.length }, 'MissingHashes');
+      await hashFiles(missingHashes, manifest);
+    }
     logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
   }
 }

@@ -3,6 +3,7 @@ import Command, { flags } from '@oclif/command';
 import pLimit from 'p-limit';
 import { hashFile } from '../hash';
 import { logger } from '../log';
+import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
@@ -33,24 +34,27 @@ export class HashManifest extends Command {
     }
     logger.debug({ total: toHash.length }, 'Hash:File');
 
-    const promises = [];
-    let count = 0;
-    for (const file of toHash) {
-      promises.push(
-        Q(async () => {
-          logger.debug({ count, total: toHash.length, file }, 'Hash:File');
-          const filePath = fsa.join(manifest.path, file.path);
-          const hash = await hashFile(fsa.readStream(filePath));
-          manifest.setHash(file.path, hash);
-          count++;
-          if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
-        }).catch((error) => logger.error({ error, path: fsa.join(manifest.path, file.path) }, 'Hash:Failed')),
-      );
-    }
-
-    await Promise.all(promises);
+    await hashFiles(toHash, manifest);
 
     await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
     logger.info({ path: args.inputFile, count: manifest.files.size }, 'Hash:Done');
   }
+}
+
+export async function hashFiles(toHash: ManifestFile[], manifest: ManifestLoader): Promise<void> {
+  const promises: Promise<unknown>[] = [];
+  let count = 0;
+  for (const file of toHash) {
+    promises.push(
+      Q(async () => {
+        logger.debug({ count, total: toHash.length, file }, 'Hash:File');
+        const filePath = fsa.join(manifest.path, file.path);
+        const hash = await hashFile(fsa.readStream(filePath));
+        manifest.setHash(file.path, hash);
+        count++;
+        if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
+      }).catch((error) => logger.error({ error, path: fsa.join(manifest.path, file.path) }, 'Hash:Failed')),
+    );
+  }
+  await Promise.all(promises);
 }
