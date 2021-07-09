@@ -7,7 +7,6 @@ import * as path from 'path';
 import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
-import { hashFile } from '../hash';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
@@ -57,10 +56,12 @@ export class SnowballSync extends Command {
     ...SnowballArgs,
     concurrency: flags.integer({ description: 'Number of upload threads to run', default: 5 }),
     filter: flags.integer({ description: 'Use tar to sync files smaller than this (Mb)', default: 1 }),
+    scan: flags.boolean({ description: 'Scan the target looking for missing files to upload', default: false }),
   };
 
   manifest: ManifestLoader;
   concurrency: number;
+  scan: boolean;
   Q: pLimit.Limit;
 
   static args = [{ name: 'manifest', required: true }];
@@ -81,6 +82,7 @@ export class SnowballSync extends Command {
     this.manifest = await ManifestLoader.load(args.manifest);
     this.Q = pLimit(flags.concurrency);
     this.concurrency = flags.concurrency;
+    this.scan = flags.scan;
 
     Stats.totalFiles = this.manifest.files.size;
     Stats.totalSize = this.manifest.size;
@@ -121,10 +123,31 @@ export class SnowballSync extends Command {
 
     const { bucket, key } = FsS3.parse(target);
 
-    const startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
-    // Update the stats for where we started from
-    Stats.count += startIndex;
-    for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
+    const startIndex = 0;
+    if (this.scan === false) {
+      const startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
+      // Update the stats for where we started from
+      Stats.count += startIndex;
+      for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
+    } else {
+      // Scan the target folder validating all files have uploaded
+      const fileMap = new Map();
+      for (const f of files) fileMap.set(f.path, f);
+      for await (const file of ManifestLoader.list(target)) {
+        const existing = fileMap.get(file.path);
+        if (existing == null) continue;
+        if (existing.size !== file.size) {
+          logger.warn({ path: file.path, sourceSize: existing.size, targetSize: file.size }, 'Upload:Scan:Mismatch');
+        } else {
+          fileMap.delete(file.path);
+        }
+      }
+      // Filter the list down to all the files
+      if (fileMap.size !== files.length) {
+        logger.info({ existing: files.length - fileMap.size, todo: fileMap.size }, 'Upload:Scan:Existing');
+        files = [...fileMap.values()];
+      }
+    }
 
     log.info({ startOffset: startIndex, files: files.length }, 'Upload:Start');
     for (let index = startIndex; index < files.length; index++) {

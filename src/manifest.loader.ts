@@ -48,6 +48,7 @@ export class ManifestLoader {
     for await (const rec of fsa.listDetails(inputPath)) {
       if (rec.size == null || rec.size === 0) continue;
       const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
+      if (filePath === '/manifest.json') continue; // Ignore the root manifest
       yield { path: filePath, size: rec.size };
     }
   }
