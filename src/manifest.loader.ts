@@ -81,7 +81,10 @@ export class ManifestLoader {
     if (this._dirtyTimeout != null) return;
     this._dirtyTimeout = setTimeout(async () => {
       const startTime = Date.now();
-      await fs.writeFile(this.sourcePath + '.1', JSON.stringify(this.toJson(), null, 2));
+      const outputData = JSON.stringify(this.toJson(), null, 2);
+      await fs.writeFile(this.sourcePath + '.1', outputData);
+      await fs.writeFile(this.sourcePath, outputData);
+
       logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);
     this._dirtyTimeout.unref();
