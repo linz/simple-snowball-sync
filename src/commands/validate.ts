@@ -85,7 +85,7 @@ export class ValidateManifest extends Command {
 
           if (file.hash !== hash) {
             stats.hashMissMatch++;
-            logger.warn({ index: i, path: filePath, expected: file.hash, got: hash }, 'Validate:Mismatch');
+            logger.warn({ index: i, path: filePath, expected: file.hash, got: hash }, 'Validate:SizeMismatch');
           } else {
             logger.debug({ index: i, filePath, size: file.size, hash: file.hash }, 'Validate:File');
           }
@@ -98,7 +98,7 @@ export class ValidateManifest extends Command {
       );
     }
 
-    if (stats.hashMissing) logger.error({ count: stats.hashMissing }, 'Validate:Missing');
+    if (stats.hashMissing) logger.error({ count: stats.hashMissing }, 'Validate:HashMissing');
 
     await Promise.all(promises);
 

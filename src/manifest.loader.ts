@@ -46,7 +46,7 @@ export class ManifestLoader {
     // Force a directory otherwise backup1*, will match backup10/ backup11/ etc..
     if (!inputPath.endsWith('/')) inputPath = inputPath + '/';
     for await (const rec of fsa.listDetails(inputPath)) {
-      if (rec.size == null || rec.size === 0) continue;
+      if (rec.size == null) continue;
       const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
       if (filePath === '/manifest.json') continue; // Ignore the root manifest
       yield { path: filePath, size: rec.size };
