@@ -123,9 +123,9 @@ export class SnowballSync extends Command {
 
     const { bucket, key } = FsS3.parse(target);
 
-    const startIndex = 0;
+    let startIndex = 0;
     if (this.scan === false) {
-      const startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
+      startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
       // Update the stats for where we started from
       Stats.count += startIndex;
       for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
@@ -169,6 +169,7 @@ export class SnowballSync extends Command {
           { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
           'Upload:Start',
         );
+
         await client.upload(uploadCtx, S3UploadOptions).promise();
         Stats.count++;
         Stats.size += file.size;
