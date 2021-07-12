@@ -1,3 +1,21 @@
+# [1.2.0](https://github.com/linz/simple-snowball-sync/compare/v1.1.0...v1.2.0) (2021-07-12)
+
+
+### Bug Fixes
+
+* **validate:** do not ignore 0 byte files ([d401447](https://github.com/linz/simple-snowball-sync/commit/d401447a5de572370d8c8725fb5b83098521cf10))
+* write to the main manifest file too but keep a backup ([cbf58a9](https://github.com/linz/simple-snowball-sync/commit/cbf58a9d537e65fd46588c12ff66396c84c0cf04))
+
+
+### Features
+
+* only load the backup manifest if the manifest is corrupt ([5dcf73e](https://github.com/linz/simple-snowball-sync/commit/5dcf73e57ff4bfbdd5115e15fe3ef97c6a340cdf))
+* **sync:** hash any file that is missing a hash ([2ce4843](https://github.com/linz/simple-snowball-sync/commit/2ce48439df4be672d394133ea1514afd366c8437))
+* **sync:** increase search range to validate all files have actually been uploaded ([eb58689](https://github.com/linz/simple-snowball-sync/commit/eb586895b1e20cada7702aa5fb2d04d34f16dbd4))
+* **sync:** introduce --scan to scan the target location and look for missing files ([e99d4e2](https://github.com/linz/simple-snowball-sync/commit/e99d4e202c2764a4bc5f7f694f851f89f77ea2e6))
+
+
+
 # [1.1.0](https://github.com/linz/simple-snowball-sync/compare/v1.0.1...v1.1.0) (2021-07-06)
 
 
