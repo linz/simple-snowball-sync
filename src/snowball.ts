@@ -1,7 +1,10 @@
 import { fsa, FsS3 } from '@linzjs/s3fs';
 import { flags } from '@oclif/command';
 import S3 from 'aws-sdk/clients/s3';
-import { logger } from './log';
+import { logger, LogType } from './log';
+import * as path from 'path';
+import * as os from 'os';
+import * as AWS from 'aws-sdk';
 
 FsS3.MaxListCount = 1_000; // Some folders are very large
 
@@ -11,7 +14,7 @@ export const SnowballArgs = {
   endpoint: flags.string({ description: 'Snowball endpoint' }),
 };
 
-export function registerSnowball(flags: { target?: string; endpoint?: string; verbose?: boolean }): S3 {
+export async function registerSnowball(flags: { target?: string; endpoint?: string; verbose?: boolean }): Promise<S3> {
   if (flags.verbose) logger.level = 'debug';
 
   let endpoint = flags.endpoint;
@@ -24,5 +27,38 @@ export function registerSnowball(flags: { target?: string; endpoint?: string; ve
   } else {
     fsa.register('s3://', new FsS3(client));
   }
+
+  await registerBuckets();
   return client;
+}
+
+function tryParseJson(x: string | Buffer): unknown | null {
+  try {
+    return JSON.parse(x.toString());
+  } catch (e) {
+    return null;
+  }
+}
+
+const configPath = path.join(os.homedir(), '.aws', 'fsa.json');
+async function registerBuckets(s3Opts = {}, log?: LogType): Promise<void> {
+  const fileExists = await fsa.exists(configPath);
+  if (!fileExists) return;
+  const config = tryParseJson(await fsa.read(configPath));
+  if (typeof config !== 'object' || config == null) return;
+
+  for (const [prefix, obj] of Object.entries(config)) {
+    if (!prefix.startsWith('s3://')) continue;
+    if (obj.source == null || obj.roleArn == null) continue;
+    const sourceCredentials =
+      obj.source === 'Ec2InstanceMetadata'
+        ? new AWS.EC2MetadataCredentials()
+        : new AWS.SharedIniFileCredentials({ profile: obj.source ?? process.env.AWS_PROFILE });
+    const credentials = new AWS.ChainableTemporaryCredentials({
+      params: { RoleArn: obj.roleArn, RoleSessionName: 'fsa-' + Math.random().toString(32) + '-' + Date.now() },
+      masterCredentials: sourceCredentials,
+    });
+    log?.trace({ prefix, source: obj.source, roleArn: obj.roleArn }, 'RegisterS3');
+    fsa.register(prefix, new FsS3(new S3({ ...s3Opts, credentials })));
+  }
 }

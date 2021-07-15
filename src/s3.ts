@@ -1,5 +1,5 @@
-import { fsa } from '@linzjs/s3fs';
-import { LogType } from './log';
+import { fsa, FsS3 } from '@linzjs/s3fs';
+import { logger, LogType } from './log';
 import { ManifestFile } from './manifest';
 
 export type BucketKey = { key: string; bucket: string };
@@ -65,3 +65,13 @@ async function findUploaded(files: ManifestFile[], target: string, checkRange = 
 export const s3Util = {
   findUploaded,
 };
+
+export interface S3Credential {
+  roleArn: string;
+  bucket: string;
+  source: 'Ec2InstanceMetadata' | string;
+}
+
+export interface FsaConfig {
+  credentials: Record<string, S3Credential>;
+}
