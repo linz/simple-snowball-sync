@@ -26,7 +26,7 @@ export async function registerSnowball(
   const client = endpoint ? new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true }) : new S3();
   if (flags.target) {
     fsa.register('s3://', new FsS3(new S3()));
-    fsa.register(flags.target, new FsS3(client));
+    if (endpoint != null) fsa.register(flags.target, new FsS3(client));
   } else {
     fsa.register('s3://', new FsS3(client));
   }
@@ -55,8 +55,8 @@ async function registerBuckets(log: LogType): Promise<void> {
       log.debug({ prefix }, 'FsaConfig:InvalidPrefix - Missing s3://');
       continue;
     }
-    if (obj.source == null || obj.roleArn == null) {
-      log.debug({ cfg: obj }, 'FsaConfig:InvalidConfig - Missing "source" or "roleArn"');
+    if (obj.roleArn == null) {
+      log.debug({ prefix, cfg: obj }, 'FsaConfig:InvalidConfig - Missing "roleArn"');
       continue;
     }
     const sourceCredentials =
