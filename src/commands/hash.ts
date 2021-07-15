@@ -19,7 +19,7 @@ export class HashManifest extends Command {
 
   async run(): Promise<void> {
     const { args, flags } = this.parse(HashManifest);
-    await registerSnowball(flags);
+    await registerSnowball(flags, logger);
     logger.info(getVersion(), 'Hash:Start');
 
     const manifest = await ManifestLoader.load(args.manifest);

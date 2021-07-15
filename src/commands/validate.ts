@@ -23,7 +23,7 @@ export class ValidateManifest extends Command {
 
     logger.info(getVersion(), 'Validate:Start');
 
-    await registerSnowball(flags);
+    await registerSnowball(flags, logger);
 
     const manifest = await ManifestLoader.load(args.manifest);
 

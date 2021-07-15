@@ -14,7 +14,10 @@ export const SnowballArgs = {
   endpoint: flags.string({ description: 'Snowball endpoint' }),
 };
 
-export async function registerSnowball(flags: { target?: string; endpoint?: string; verbose?: boolean }): Promise<S3> {
+export async function registerSnowball(
+  flags: { target?: string; endpoint?: string; verbose?: boolean },
+  log: LogType,
+): Promise<S3> {
   if (flags.verbose) logger.level = 'debug';
 
   let endpoint = flags.endpoint;
@@ -28,7 +31,7 @@ export async function registerSnowball(flags: { target?: string; endpoint?: stri
     fsa.register('s3://', new FsS3(client));
   }
 
-  await registerBuckets();
+  await registerBuckets(log);
   return client;
 }
 
@@ -41,24 +44,32 @@ function tryParseJson(x: string | Buffer): unknown | null {
 }
 
 const configPath = path.join(os.homedir(), '.aws', 'fsa.json');
-async function registerBuckets(s3Opts = {}, log?: LogType): Promise<void> {
+async function registerBuckets(log: LogType): Promise<void> {
   const fileExists = await fsa.exists(configPath);
   if (!fileExists) return;
   const config = tryParseJson(await fsa.read(configPath));
   if (typeof config !== 'object' || config == null) return;
 
   for (const [prefix, obj] of Object.entries(config)) {
-    if (!prefix.startsWith('s3://')) continue;
-    if (obj.source == null || obj.roleArn == null) continue;
+    if (!prefix.startsWith('s3://')) {
+      log.debug({ prefix }, 'FsaConfig:InvalidPrefix - Missing s3://');
+      continue;
+    }
+    if (obj.source == null || obj.roleArn == null) {
+      log.debug({ cfg: obj }, 'FsaConfig:InvalidConfig - Missing "source" or "roleArn"');
+      continue;
+    }
     const sourceCredentials =
       obj.source === 'Ec2InstanceMetadata'
         ? new AWS.EC2MetadataCredentials()
         : new AWS.SharedIniFileCredentials({ profile: obj.source ?? process.env.AWS_PROFILE });
+
     const credentials = new AWS.ChainableTemporaryCredentials({
       params: { RoleArn: obj.roleArn, RoleSessionName: 'fsa-' + Math.random().toString(32) + '-' + Date.now() },
       masterCredentials: sourceCredentials,
     });
-    log?.trace({ prefix, source: obj.source, roleArn: obj.roleArn }, 'RegisterS3');
-    fsa.register(prefix, new FsS3(new S3({ ...s3Opts, credentials })));
+
+    log.debug({ prefix, source: obj.source, roleArn: obj.roleArn }, 'RegisterS3');
+    fsa.register(prefix, new FsS3(new S3({ credentials })));
   }
 }

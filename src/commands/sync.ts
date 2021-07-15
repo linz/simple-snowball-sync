@@ -70,7 +70,7 @@ export class SnowballSync extends Command {
 
     const target = flags.target;
     if (target == null) throw new Error('--target must be in the format s3://bucket/prefix');
-    client = await registerSnowball(flags);
+    client = await registerSnowball(flags, logger);
 
     logger.info({ target, concurrency: flags.concurrency, endpoint: flags.endpoint, ...getVersion() }, 'Sync:Start');
 
