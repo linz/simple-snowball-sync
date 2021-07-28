@@ -46,9 +46,9 @@
     strip-json-comments "^3.1.1"
 
 "@linzjs/s3fs@^6.3.0":
-  version "6.3.0"
-  resolved "https://registry.yarnpkg.com/@linzjs/s3fs/-/s3fs-6.3.0.tgz#f4f6a535c2274fd5c3580b17dfa12e11090c0fd5"
-  integrity sha512-bjrPkDKIlORFaKVxhTIJN5E6v6vq1V4PR4L0gWCJDz+3RN1Z0IQk8UkXcpfaK2Xr2tLQMn6SEjH6ImiMBVdZog==
+  version "6.5.0"
+  resolved "https://registry.yarnpkg.com/@linzjs/s3fs/-/s3fs-6.5.0.tgz#f11cb335a750cf72c643b6b03560adc3161e3b00"
+  integrity sha512-QIgko8oHXMqFZLQOzK4L59qNXUxFDNAzoP5zqSkr970W6TUgqbhHffKCyMgncBaijdgAXhfWZXqiSX/vznPBog==
 
 "@linzjs/style@^2.1.4":
   version "2.1.4"
