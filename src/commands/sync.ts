@@ -10,7 +10,6 @@ import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
-import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { uploadFile } from '../upload';
 import { getVersion } from '../version';
@@ -117,13 +116,7 @@ export class SnowballSync extends Command {
 
     const { bucket, key } = FsS3.parse(target);
 
-    let startIndex = 0;
-    if (this.scan === false) {
-      startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
-      // Update the stats for where we started from
-      Stats.count += startIndex;
-      for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
-    } else {
+    if (this.scan) {
       // Scan the target folder validating all files have uploaded
       const fileMap = new Map();
       for (const f of files) fileMap.set(f.path, f);
@@ -141,10 +134,13 @@ export class SnowballSync extends Command {
         logger.info({ existing: files.length - fileMap.size, todo: fileMap.size }, 'Upload:Scan:Existing');
         files = [...fileMap.values()];
       }
+    } else {
+      // Only upload files that have no hash
+      files = files.filter((f) => f.hash === null);
     }
 
-    log.info({ startOffset: startIndex, files: files.length }, 'Upload:Start');
-    for (let index = startIndex; index < files.length; index++) {
+    log.info({ startOffset: 0, files: files.length }, 'Upload:Start');
+    for (let index = 0; index < files.length; index++) {
       const file = files[index];
       const p = this.Q(async () => {
         // Hash the file while uploading
