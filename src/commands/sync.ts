@@ -12,6 +12,7 @@ import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
+import { uploadFile } from '../upload';
 import { getVersion } from '../version';
 import { hashFiles } from './hash';
 
