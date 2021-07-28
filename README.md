@@ -4,7 +4,7 @@ Sync folders of data onto a snowball
 
 Features:
 - Start and stop the process at any stage
-- Compute sha256 hash of all files and stored inside of the snowball in a manifiest.json
+- Compute [SRI](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) sha256 hash of all files and stored inside of the snowball in a manifiest.json
 - Compress small files into a tar.gz so snowball can [batch extract](https://docs.aws.amazon.com/snowball/latest/developer-guide/batching-small-files.html) when importing into s3
 - Validate uploaded files against the computed hash
 
@@ -22,7 +22,7 @@ Start the syncing processes
 sss sync manifest.json --endpoint 10.254.32.104 --target s3://linz-snowball-a/drive1
 ```
 
-Syncing can be stopped and started at any time, When resuming the process will use a binary search to find the last uploaded item and compare the file size to make sure it finished uploading.
+Syncing can be stopped and started at any time
 
 Options:
 
