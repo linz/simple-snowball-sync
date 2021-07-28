@@ -14,7 +14,6 @@ import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
 import { hashFiles } from './hash';
-import { BackOff, uploadFile } from '../upload';
 
 const Stats = {
   /** Files uploaded over all runs */
