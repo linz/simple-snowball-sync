@@ -3,15 +3,14 @@ import sinon from 'sinon';
 import { BackOff, uploadFile } from '../upload';
 
 o.spec('Upload', () => {
-  let sandbox: sinon.SinonSandbox;
+  const sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
-  o.before(function () {
-    sandbox = sinon.createSandbox();
+  o.before(() => {
     BackOff.count = 3;
     BackOff.time = 1;
   });
 
-  o.afterEach(function () {
+  o.afterEach(() => {
     sandbox.restore();
   });
 

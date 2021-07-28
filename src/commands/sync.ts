@@ -60,10 +60,6 @@ export class SnowballSync extends Command {
 
   static args = [{ name: 'manifest', required: true }];
   async run(): Promise<void> {
-    // Set back off properties for the uploads
-    BackOff.time = 500;
-    BackOff.count = 3;
-
     const { args, flags } = this.parse(SnowballSync);
 
     const target = flags.target;
