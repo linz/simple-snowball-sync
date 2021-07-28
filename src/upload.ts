@@ -6,7 +6,7 @@ const OneMb = 1024 * 1024;
 
 const S3UploadOptions = {
   /**
-   * Force chunks to be at least Mb,
+   * Force chunks to be at least 105 Mb,
    * lots of small chunks (<100Mb) take too long to transfer on high speed networks
    */
   partSize: 105 * OneMb,
