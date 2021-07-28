@@ -12,6 +12,7 @@ import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
+import { uploadFile } from '../upload';
 import { getVersion } from '../version';
 import { hashFiles } from './hash';
 
@@ -30,6 +31,7 @@ const Stats = {
 
 const OneMb = 1024 * 1024;
 const OneGb = OneMb * 1024;
+
 /**
  * Limit the size of unpacked tar balls uploaded to s3
  * Snowball allows upto 100GB per tar
@@ -40,14 +42,6 @@ const MaxTarSizeByes = 5 * OneGb;
  * Snowballs allow upto 100,000 files
  */
 const MaxTarFileCount = 10_000;
-
-const S3UploadOptions = {
-  /**
-   * Force chunks to be at least 250Mb,
-   * lots of small chunks (<100Mb) take too long to transfer on high speed networks
-   */
-  partSize: 105 * OneMb,
-};
 
 let client: S3;
 
@@ -169,14 +163,13 @@ export class SnowballSync extends Command {
           { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
           'Upload:Start',
         );
-
-        await client.upload(uploadCtx, S3UploadOptions).promise();
+        await uploadFile(client, uploadCtx);
         Stats.count++;
         Stats.size += file.size;
         Stats.progressSize += file.size;
         this.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
-      }).catch((error) => {
-        logger.error({ error, path: this.manifest.file(file) }, 'UploadFailed');
+      }).catch((err) => {
+        logger.error({ err, path: this.manifest.file(file) }, 'UploadFailed');
         process.exit(1);
       });
 
@@ -243,7 +236,7 @@ export class SnowballSync extends Command {
           'snowball-auto-extract': 'true', // Auto extract the tar file once its uploaded to s3
         },
       };
-      await client.upload(uploadCtx, S3UploadOptions).promise();
+      await uploadFile(client, uploadCtx);
       await tarPromise;
       Stats.size += totalSize;
       Stats.progressSize += totalSize;
