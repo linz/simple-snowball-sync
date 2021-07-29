@@ -9,7 +9,7 @@ import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
-import { ManifestLoader } from '../manifest.loader';
+import { isDifferentManifestExists, ManifestLoader, MANIFEST_FILE_NAME } from '../manifest.loader';
 import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { uploadFile } from '../upload';
@@ -74,6 +74,10 @@ export class SnowballSync extends Command {
     if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
 
     this.manifest = await ManifestLoader.load(args.manifest);
+    if (await isDifferentManifestExists(this.manifest, target)) {
+      throw new Error('A manifest concerning different files already exists in the target directory.');
+    }
+
     this.Q = pLimit(flags.concurrency);
     this.concurrency = flags.concurrency;
     this.scan = flags.scan;
@@ -99,7 +103,7 @@ export class SnowballSync extends Command {
     await this.uploadSmallFiles(smallFiles, target);
     const manifestJson = Buffer.from(this.manifest.toJsonString());
     // Upload the manifest
-    await fsa.write(fsa.join(target, 'manifest.json'), manifestJson);
+    await fsa.write(fsa.join(target, MANIFEST_FILE_NAME), manifestJson);
     await fsa.write(args.manifest, manifestJson);
 
     // Force rehash any file that is missing a hash

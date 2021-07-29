@@ -1,13 +1,47 @@
 import { fsa } from '@linzjs/s3fs';
-import { promises as fs } from 'fs';
+import * as fs from 'fs';
+import { join } from 'path';
 import { logger } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
 const BackupExtension = '.1';
+export const MANIFEST_FILE_NAME = 'manifest.json';
 
 function isManifestPath(fileName: string): boolean {
   if (fileName.endsWith('.json' + BackupExtension)) return true;
   if (fileName.endsWith('.json')) return true;
+  return false;
+}
+
+/**
+ * Return true if manifest dataPath are different
+ *
+ * @param manifestA
+ * @param manifestB
+ * @returns
+ */
+export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: ManifestLoader): boolean {
+  if (manifestA.dataPath !== manifestB.dataPath) return true;
+  return false;
+}
+
+/**
+ * Return true if a manifest.json generated for the same files exists in the destination folder.
+ *
+ * @param currentManifest
+ * @param destPath
+ * @returns
+ */
+export async function isDifferentManifestExists(currentManifest: ManifestLoader, destPath: string): Promise<boolean> {
+  if (!destPath.endsWith('/')) destPath = destPath + '/';
+  const existingManifestPath = join(destPath, MANIFEST_FILE_NAME);
+
+  if (fs.existsSync(existingManifestPath)) {
+    const existingManifest = await ManifestLoader.load(existingManifestPath);
+
+    if (isManifestsDifferent(currentManifest, existingManifest)) return true;
+  }
+
   return false;
 }
 
@@ -58,7 +92,7 @@ export class ManifestLoader {
     for await (const rec of fsa.listDetails(inputPath)) {
       if (rec.size == null) continue;
       const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
-      if (filePath === '/manifest.json') continue; // Ignore the root manifest
+      if (filePath === '/' + MANIFEST_FILE_NAME) continue; // Ignore the root manifest
       yield { path: filePath, size: rec.size };
     }
   }
@@ -104,8 +138,8 @@ export class ManifestLoader {
       const startTime = Date.now();
       const outputData = JSON.stringify(this.toJson(), null, 2);
 
-      await fs.writeFile(this.sourcePath + BackupExtension, outputData);
-      await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
+      await fs.promises.writeFile(this.sourcePath + BackupExtension, outputData);
+      await fs.promises.rename(this.sourcePath + BackupExtension, this.sourcePath);
 
       logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);
