@@ -9,7 +9,7 @@ import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
-import { isDifferentManifestExists, ManifestLoader, ManifestFileName } from '../manifest.loader';
+import { isDifferentManifestExist, ManifestLoader, ManifestFileName } from '../manifest.loader';
 import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { uploadFile } from '../upload';
@@ -74,7 +74,7 @@ export class SnowballSync extends Command {
     if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
 
     this.manifest = await ManifestLoader.load(args.manifest);
-    if (await isDifferentManifestExists(this.manifest, target)) {
+    if (await isDifferentManifestExist(this.manifest, target)) {
       throw new Error('The existing manifest in the target directory contains different files.');
     }
 
