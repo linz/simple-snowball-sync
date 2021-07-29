@@ -35,10 +35,10 @@ o.spec('ManifestLoader', () => {
   const manifestBLoaded: ManifestLoader = new ManifestLoader(manifestB.path, manifestB);
 
   o('should return true because manifests are different', async () => {
-    o(isManifestsDifferent(manifestALoaded, manifestBLoaded)).equals(true);
+    o(await isManifestsDifferent(manifestALoaded, manifestBLoaded)).equals(true);
   });
 
   o('should return false because both manifest are the same', async () => {
-    o(isManifestsDifferent(manifestALoaded, manifestALoaded)).equals(false);
+    o(await isManifestsDifferent(manifestALoaded, manifestALoaded)).equals(false);
   });
 });

@@ -1,11 +1,11 @@
 import { fsa } from '@linzjs/s3fs';
-import * as fs from 'fs';
-import { join } from 'path';
+import { promises as fs } from 'fs';
 import { logger } from './log';
 import { Manifest, ManifestFile } from './manifest';
+import { hashFile } from './hash';
 
 const BackupExtension = '.1';
-export const MANIFEST_FILE_NAME = 'manifest.json';
+export const ManifestFileName = 'manifest.json';
 
 function isManifestPath(fileName: string): boolean {
   if (fileName.endsWith('.json' + BackupExtension)) return true;
@@ -14,14 +14,48 @@ function isManifestPath(fileName: string): boolean {
 }
 
 /**
- * Return true if manifest dataPath are different
+ * Compare two manifest.json file hashes. Return true if both hashes match.
+ *
+ * @param manifestA
+ * @param manifestB
+ * @returns
+ */
+async function isSameManifestFileHash(manifestA: ManifestLoader, manifestB: ManifestLoader): Promise<Promise<boolean>> {
+  const hashManifestA = await hashFile(fsa.readStream(manifestA.sourcePath));
+  const hashManifestB = await hashFile(fsa.readStream(manifestB.sourcePath));
+
+  if (hashManifestA === hashManifestB) {
+    // Both manifest.json files have the exact same content.
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Compare the 'Files' data of two manifest.json files. Return true if manifestA contains all the files (with identical data) of ManifestB.
+ * ManifestA can contain more files than ManifestB.
  *
  * @param manifestA
  * @param manifestB
  * @returns
  */
 export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: ManifestLoader): boolean {
-  if (manifestA.dataPath !== manifestB.dataPath) return true;
+  let comparedValue = undefined;
+
+  for (const [key, value] of manifestB.files.entries()) {
+    comparedValue = manifestA.files.get(key);
+
+    if (
+      comparedValue?.path === value.path &&
+      comparedValue?.size === value.size &&
+      comparedValue?.hash === value.hash
+    ) {
+      continue;
+    } else {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -34,11 +68,12 @@ export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: Manif
  */
 export async function isDifferentManifestExists(currentManifest: ManifestLoader, destPath: string): Promise<boolean> {
   if (!destPath.endsWith('/')) destPath = destPath + '/';
-  const existingManifestPath = join(destPath, MANIFEST_FILE_NAME);
+  const existingManifestPath = fsa.join(destPath, ManifestFileName);
 
-  if (fs.existsSync(existingManifestPath)) {
+  if (fsa.exists(existingManifestPath)) {
     const existingManifest = await ManifestLoader.load(existingManifestPath);
-
+    logger.info({ existingManifest }, 'CheckTargetDir');
+    if (await isSameManifestFileHash(currentManifest, existingManifest)) return false;
     if (isManifestsDifferent(currentManifest, existingManifest)) return true;
   }
 
@@ -92,7 +127,7 @@ export class ManifestLoader {
     for await (const rec of fsa.listDetails(inputPath)) {
       if (rec.size == null) continue;
       const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
-      if (filePath === '/' + MANIFEST_FILE_NAME) continue; // Ignore the root manifest
+      if (filePath === '/' + ManifestFileName) continue; // Ignore the root manifest
       yield { path: filePath, size: rec.size };
     }
   }
@@ -138,8 +173,8 @@ export class ManifestLoader {
       const startTime = Date.now();
       const outputData = JSON.stringify(this.toJson(), null, 2);
 
-      await fs.promises.writeFile(this.sourcePath + BackupExtension, outputData);
-      await fs.promises.rename(this.sourcePath + BackupExtension, this.sourcePath);
+      await fs.writeFile(this.sourcePath + BackupExtension, outputData);
+      await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
 
       logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);

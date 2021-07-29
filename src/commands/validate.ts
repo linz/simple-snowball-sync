@@ -3,7 +3,7 @@ import Command, { flags } from '@oclif/command';
 import pLimit from 'p-limit';
 import { hashFile } from '../hash';
 import { logger } from '../log';
-import { ManifestLoader, MANIFEST_FILE_NAME } from '../manifest.loader';
+import { ManifestLoader, ManifestFileName } from '../manifest.loader';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
 
@@ -42,7 +42,7 @@ export class ValidateManifest extends Command {
         expectedFiles.delete(file.path);
       } else {
         // Manifest files are a extra file that is added
-        if (file.path === MANIFEST_FILE_NAME) continue;
+        if (file.path === ManifestFileName) continue;
         extraFiles.add(file.path);
       }
     }
