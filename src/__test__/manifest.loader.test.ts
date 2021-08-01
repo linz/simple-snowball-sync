@@ -102,10 +102,7 @@ o.spec('ManifestLoader', () => {
     o(await isManifestsDifferent(manifestBLoaded, manifestDLoaded)).equals(true);
   });
 
-  o('should return true because manifest D contains same file name than B but size is different', async () => {
-    o(await isManifestsDifferent(manifestBLoaded, manifestDLoaded)).equals(true);
-  });
-  o('should return true because manifest E contains same file name than E but path is different', async () => {
+  o('should return true because manifest E contains same file name than D but hash is different', async () => {
     o(await isManifestsDifferent(manifestDLoaded, manifestELoaded)).equals(true);
   });
 });
