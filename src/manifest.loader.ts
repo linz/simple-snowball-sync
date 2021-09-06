@@ -27,7 +27,7 @@ export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: Manif
     if (comparedValue == null) return true;
     if (comparedValue.path !== value.path) return true;
     if (comparedValue.size !== value.size) return true;
-    if (comparedValue.hash !== value.hash) return true;
+    if (comparedValue.hash && comparedValue.hash !== value.hash) return true;
   }
 
   return false;

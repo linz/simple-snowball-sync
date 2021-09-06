@@ -36,7 +36,7 @@ export async function uploadFile(client: S3, uploadCtx: PutObjectRequest): Promi
     } catch (e) {
       // Sleep for back off
       await new Promise((resolve) => setTimeout(resolve, BackOff.time * (uploadErrors.length + 1), {}));
-      uploadErrors.push(e);
+      uploadErrors.push(<Error>e);
       if (uploadErrors.length === BackOff.count) {
         break;
       }
