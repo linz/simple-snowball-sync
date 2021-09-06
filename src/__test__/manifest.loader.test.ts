@@ -3,7 +3,6 @@ import { Manifest } from '../manifest';
 import { isManifestsDifferent, ManifestLoader } from '../manifest.loader';
 
 o.spec('ManifestLoader', () => {
-  // Common test data (some manifests are used in different tests)
   const manifestA = createManifest();
 
   o('should return true because manifests are different', async () => {
