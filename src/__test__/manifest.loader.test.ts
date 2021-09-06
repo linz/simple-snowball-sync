@@ -27,7 +27,7 @@ o.spec('ManifestLoader', () => {
     o(await isManifestsDifferent(manifestA, manifestB)).equals(true);
   });
 
-  o('should return true because manifest E contains same file name than D but hash is different', async () => {
+  o('should return true because manifest B contains same file name than A but hash is different', async () => {
     const manifestB: ManifestLoader = createManifest();
     manifestB.files.values().next().value.hash = 'def';
     o(await isManifestsDifferent(manifestA, manifestB)).equals(true);
