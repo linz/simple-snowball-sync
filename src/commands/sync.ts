@@ -10,7 +10,6 @@ import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
 import { isDifferentManifestExist, ManifestLoader, ManifestFileName } from '../manifest.loader';
-import { s3Util } from '../s3';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { uploadFile } from '../upload';
 import { getVersion } from '../version';
