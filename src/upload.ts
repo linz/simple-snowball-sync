@@ -6,7 +6,7 @@ const OneMb = 1024 * 1024;
 
 const S3UploadOptions = {
   /**
-   * Force chunks to be at least Mb,
+   * Force chunks to be at least 105 Mb,
    * lots of small chunks (<100Mb) take too long to transfer on high speed networks
    */
   partSize: 105 * OneMb,
@@ -36,7 +36,7 @@ export async function uploadFile(client: S3, uploadCtx: PutObjectRequest): Promi
     } catch (e) {
       // Sleep for back off
       await new Promise((resolve) => setTimeout(resolve, BackOff.time * (uploadErrors.length + 1), {}));
-      uploadErrors.push(e);
+      uploadErrors.push(e as Error);
       if (uploadErrors.length === BackOff.count) {
         break;
       }

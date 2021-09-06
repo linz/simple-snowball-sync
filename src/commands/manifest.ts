@@ -3,7 +3,7 @@ import { Command } from '@oclif/command';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { logger } from '../log';
-import { ManifestLoader } from '../manifest.loader';
+import { ManifestLoader, ManifestFileName } from '../manifest.loader';
 import { registerSnowball, SnowballArgs } from '../snowball';
 import { getVersion } from '../version';
 
@@ -42,7 +42,8 @@ export class CreateManifest extends Command {
 
     const manifestName =
       ManifestLoader.normalize(args.inputFile).replace(pathReg, '_').replace(/ /g, '_').replace(':', '') +
-      '.manifest.json';
+      '.' +
+      ManifestFileName;
 
     const manifest = await ManifestLoader.create(manifestName, inputPath);
 

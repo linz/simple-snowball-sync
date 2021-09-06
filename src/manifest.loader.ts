@@ -4,10 +4,53 @@ import { logger } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
 const BackupExtension = '.1';
+export const ManifestFileName = 'manifest.json';
 
 function isManifestPath(fileName: string): boolean {
   if (fileName.endsWith('.json' + BackupExtension)) return true;
   if (fileName.endsWith('.json')) return true;
+  return false;
+}
+
+/**
+ * Compare the 'Files' data of two manifest.json files.
+ * manifestA can contain more files than manifestB.
+ *
+ * @param manifestA The manifest in the source directory.
+ * @param manifestB The manifest in the destination directory.
+ * @returns true if manifestA contains all the files (with identical data) of manifestB.
+ */
+export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: ManifestLoader): boolean {
+  for (const value of manifestB.files.values()) {
+    const comparedValue = manifestA.files.get(value.path);
+
+    if (comparedValue == null) return true;
+    if (comparedValue.path !== value.path) return true;
+    if (comparedValue.size !== value.size) return true;
+    if (comparedValue.hash && comparedValue.hash !== value.hash) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Return true if a manifest.json generated for the same files exists in the destination directory.
+ *
+ * @param currentManifest The manifest in the source directory.
+ * @param destPath The destination directory path (where files will be uploaded).
+ * @returns true if a manifest containing different files exists in the destination directory.
+ */
+export async function isDifferentManifestExist(currentManifest: ManifestLoader, destPath: string): Promise<boolean> {
+  const existingManifestPath = fsa.join(destPath, ManifestFileName);
+  const isManifestExist = await fsa.exists(existingManifestPath);
+
+  if (isManifestExist) {
+    const existingManifest = await ManifestLoader.load(existingManifestPath);
+    logger.info({ existingManifest }, 'CheckTargetDir');
+
+    if (isManifestsDifferent(currentManifest, existingManifest)) return true;
+  }
+
   return false;
 }
 
@@ -58,7 +101,7 @@ export class ManifestLoader {
     for await (const rec of fsa.listDetails(inputPath)) {
       if (rec.size == null) continue;
       const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
-      if (filePath === '/manifest.json') continue; // Ignore the root manifest
+      if (filePath === '/' + ManifestFileName) continue; // Ignore the root manifest
       yield { path: filePath, size: rec.size };
     }
   }
