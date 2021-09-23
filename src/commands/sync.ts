@@ -140,7 +140,7 @@ export class SnowballSync extends Command {
       }
     } else {
       // Only upload files that have no hash
-      files = files.filter((f) => f.hash === null);
+      files = files.filter((f) => f.hash == null);
     }
 
     log.info({ startOffset: 0, files: files.length }, 'Upload:Start');
