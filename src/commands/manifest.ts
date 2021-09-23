@@ -32,7 +32,7 @@ export class CreateManifest extends Command {
 
   async run(): Promise<void> {
     const { args, flags } = this.parse(CreateManifest);
-    registerSnowball(flags);
+    await registerSnowball(flags, logger);
     logger.info(getVersion(), 'Manifest:Start');
 
     const inputPath = await this.parseInputPath(args.inputFile);
