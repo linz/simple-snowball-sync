@@ -1,11 +1,62 @@
 import { fsa } from '@linzjs/s3fs';
-import { existsSync, promises as fs } from 'fs';
+import { promises as fs } from 'fs';
 import { logger } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
+const BackupExtension = '.1';
+export const ManifestFileName = 'manifest.json';
+
+function isManifestPath(fileName: string): boolean {
+  if (fileName.endsWith('.json' + BackupExtension)) return true;
+  if (fileName.endsWith('.json')) return true;
+  return false;
+}
+
+/**
+ * Compare the 'Files' data of two manifest.json files.
+ * manifestA can contain more files than manifestB.
+ *
+ * @param manifestA The manifest in the source directory.
+ * @param manifestB The manifest in the destination directory.
+ * @returns true if manifestA contains all the files (with identical data) of manifestB.
+ */
+export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: ManifestLoader): boolean {
+  for (const value of manifestB.files.values()) {
+    const comparedValue = manifestA.files.get(value.path);
+
+    if (comparedValue == null) return true;
+    if (comparedValue.path !== value.path) return true;
+    if (comparedValue.size !== value.size) return true;
+    if (comparedValue.hash && comparedValue.hash !== value.hash) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Return true if a manifest.json generated for the same files exists in the destination directory.
+ *
+ * @param currentManifest The manifest in the source directory.
+ * @param destPath The destination directory path (where files will be uploaded).
+ * @returns true if a manifest containing different files exists in the destination directory.
+ */
+export async function isDifferentManifestExist(currentManifest: ManifestLoader, destPath: string): Promise<boolean> {
+  const existingManifestPath = fsa.join(destPath, ManifestFileName);
+  const isManifestExist = await fsa.exists(existingManifestPath);
+
+  if (isManifestExist) {
+    const existingManifest = await ManifestLoader.load(existingManifestPath);
+    logger.info({ existingManifest }, 'CheckTargetDir');
+
+    if (isManifestsDifferent(currentManifest, existingManifest)) return true;
+  }
+
+  return false;
+}
+
 export class ManifestLoader {
   files: Map<string, ManifestFile> = new Map();
-  isDirty = false;
+
   dataPath: string;
   sourcePath: string;
   size: number;
@@ -26,13 +77,15 @@ export class ManifestLoader {
   }
 
   static async load(fileName: string): Promise<ManifestLoader> {
-    if (!fileName.endsWith('.json')) throw new Error('Invalid manifest path ' + fileName);
-    let sourceFile = fileName;
-    if (existsSync(fileName + '.bak')) sourceFile = fileName + '.bak';
-    const buf = await fsa.read(sourceFile);
-
-    const manifest: Manifest = JSON.parse(buf.toString());
-    return new ManifestLoader(fileName, manifest);
+    if (!isManifestPath(fileName)) throw new Error('Invalid manifest path ' + fileName);
+    const buf = await fsa.read(fileName);
+    try {
+      const manifest: Manifest = JSON.parse(buf.toString());
+      return new ManifestLoader(fileName, manifest);
+    } catch (e) {
+      if (fileName.endsWith(BackupExtension)) throw e;
+      return this.load(fileName + BackupExtension);
+    }
   }
 
   /** Remove leading and trailing slashes */
@@ -48,7 +101,7 @@ export class ManifestLoader {
     for await (const rec of fsa.listDetails(inputPath)) {
       if (rec.size == null) continue;
       const filePath = ManifestLoader.normalize(rec.path.slice(inputPath.length));
-      if (filePath === '/manifest.json') continue; // Ignore the root manifest
+      if (filePath === '/' + ManifestFileName) continue; // Ignore the root manifest
       yield { path: filePath, size: rec.size };
     }
   }
@@ -81,15 +134,21 @@ export class ManifestLoader {
     return output;
   }
 
+  get isDirty(): boolean {
+    return this._dirtyTimeout != null;
+  }
+
   _dirtyTimeout: NodeJS.Timer | null = null;
   dirty(): void {
-    this.isDirty = true;
     if (this._dirtyTimeout != null) return;
     this._dirtyTimeout = setTimeout(async () => {
+      this._dirtyTimeout = null;
+
       const startTime = Date.now();
       const outputData = JSON.stringify(this.toJson(), null, 2);
-      await fs.writeFile(this.sourcePath + '.1', outputData);
-      await fs.writeFile(this.sourcePath, outputData);
+
+      await fs.writeFile(this.sourcePath + BackupExtension, outputData);
+      await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
 
       logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);

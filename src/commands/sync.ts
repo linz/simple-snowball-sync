@@ -9,9 +9,9 @@ import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
-import { ManifestLoader } from '../manifest.loader';
-import { s3Util } from '../s3';
+import { isDifferentManifestExist, ManifestLoader, ManifestFileName } from '../manifest.loader';
 import { registerSnowball, SnowballArgs } from '../snowball';
+import { uploadFile } from '../upload';
 import { getVersion } from '../version';
 import { hashFiles } from './hash';
 
@@ -30,6 +30,7 @@ const Stats = {
 
 const OneMb = 1024 * 1024;
 const OneGb = OneMb * 1024;
+
 /**
  * Limit the size of unpacked tar balls uploaded to s3
  * Snowball allows upto 100GB per tar
@@ -40,14 +41,6 @@ const MaxTarSizeByes = 5 * OneGb;
  * Snowballs allow upto 100,000 files
  */
 const MaxTarFileCount = 10_000;
-
-const S3UploadOptions = {
-  /**
-   * Force chunks to be at least 250Mb,
-   * lots of small chunks (<100Mb) take too long to transfer on high speed networks
-   */
-  partSize: 105 * OneMb,
-};
 
 let client: S3;
 
@@ -80,6 +73,10 @@ export class SnowballSync extends Command {
     if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
 
     this.manifest = await ManifestLoader.load(args.manifest);
+    if (await isDifferentManifestExist(this.manifest, target)) {
+      throw new Error('The existing manifest in the target directory contains different files.');
+    }
+
     this.Q = pLimit(flags.concurrency);
     this.concurrency = flags.concurrency;
     this.scan = flags.scan;
@@ -105,7 +102,7 @@ export class SnowballSync extends Command {
     await this.uploadSmallFiles(smallFiles, target);
     const manifestJson = Buffer.from(this.manifest.toJsonString());
     // Upload the manifest
-    await fsa.write(fsa.join(target, 'manifest.json'), manifestJson);
+    await fsa.write(fsa.join(target, ManifestFileName), manifestJson);
     await fsa.write(args.manifest, manifestJson);
 
     // Force rehash any file that is missing a hash
@@ -123,13 +120,7 @@ export class SnowballSync extends Command {
 
     const { bucket, key } = FsS3.parse(target);
 
-    const startIndex = 0;
-    if (this.scan === false) {
-      const startIndex = await s3Util.findUploaded(files, target, this.concurrency, logger);
-      // Update the stats for where we started from
-      Stats.count += startIndex;
-      for (let i = 0; i < startIndex; i++) Stats.progressSize += files[i].size;
-    } else {
+    if (this.scan) {
       // Scan the target folder validating all files have uploaded
       const fileMap = new Map();
       for (const f of files) fileMap.set(f.path, f);
@@ -147,10 +138,13 @@ export class SnowballSync extends Command {
         logger.info({ existing: files.length - fileMap.size, todo: fileMap.size }, 'Upload:Scan:Existing');
         files = [...fileMap.values()];
       }
+    } else {
+      // Only upload files that have no hash
+      files = files.filter((f) => f.hash === null);
     }
 
-    log.info({ startOffset: startIndex, files: files.length }, 'Upload:Start');
-    for (let index = startIndex; index < files.length; index++) {
+    log.info({ startOffset: 0, files: files.length }, 'Upload:Start');
+    for (let index = 0; index < files.length; index++) {
       const file = files[index];
       const p = this.Q(async () => {
         // Hash the file while uploading
@@ -169,13 +163,13 @@ export class SnowballSync extends Command {
           { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
           'Upload:Start',
         );
-        await client.upload(uploadCtx, S3UploadOptions).promise();
+        await uploadFile(client, uploadCtx);
         Stats.count++;
         Stats.size += file.size;
         Stats.progressSize += file.size;
         this.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
-      }).catch((error) => {
-        logger.error({ error, path: this.manifest.file(file) }, 'UploadFailed');
+      }).catch((err) => {
+        logger.error({ err, path: this.manifest.file(file) }, 'UploadFailed');
         process.exit(1);
       });
 
@@ -242,7 +236,7 @@ export class SnowballSync extends Command {
           'snowball-auto-extract': 'true', // Auto extract the tar file once its uploaded to s3
         },
       };
-      await client.upload(uploadCtx, S3UploadOptions).promise();
+      await uploadFile(client, uploadCtx);
       await tarPromise;
       Stats.size += totalSize;
       Stats.progressSize += totalSize;
