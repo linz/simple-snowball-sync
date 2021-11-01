@@ -12,7 +12,7 @@ const Q = pLimit(5);
 export class ValidateManifest extends Command {
   static flags = {
     ...SnowballArgs,
-    sample: flags.string({ description: 'Percentage of files to check', default: '1' }),
+    sample: flags.string({ description: 'Percentage of files to checksum', default: '0' }),
   };
 
   static args = [{ name: 'manifest', required: true }];
