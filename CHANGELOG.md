@@ -1,3 +1,20 @@
+# [1.3.0](https://github.com/linz/simple-snowball-sync/compare/v1.2.0...v1.3.0) (2021-11-02)
+
+
+### Bug Fixes
+
+* **sync:** correctly upload unhashed files ([#186](https://github.com/linz/simple-snowball-sync/issues/186)) ([6f9379c](https://github.com/linz/simple-snowball-sync/commit/6f9379c6c799104f4a144ba6e2722c28f3e325c5))
+* upload all files that are missing a SRI hash inside the manifest ([#112](https://github.com/linz/simple-snowball-sync/issues/112)) ([22cd735](https://github.com/linz/simple-snowball-sync/commit/22cd73532bcb09e5c8f3ca82e6719379cec62532))
+
+
+### Features
+
+* **validate:** do not hash the files when validating by default ([0bb1223](https://github.com/linz/simple-snowball-sync/commit/0bb12232e6e9fb09bdefa6132049bd6deedca3dc))
+* manually configure buckets using a config object ([#90](https://github.com/linz/simple-snowball-sync/issues/90)) ([6478476](https://github.com/linz/simple-snowball-sync/commit/6478476a9fa80b204a207d32f984cab4f0e66da0))
+* upload retries 3 times in case of issue ([#101](https://github.com/linz/simple-snowball-sync/issues/101)) ([8345fba](https://github.com/linz/simple-snowball-sync/commit/8345fba3eaf71a32ca862897ee0d6ab0427b085a))
+
+
+
 # [1.2.0](https://github.com/linz/simple-snowball-sync/compare/v1.1.0...v1.2.0) (2021-07-12)
 
 
