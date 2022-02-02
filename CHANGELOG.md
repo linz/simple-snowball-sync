@@ -1,3 +1,12 @@
+## [1.3.1](https://github.com/linz/simple-snowball-sync/compare/v1.3.0...v1.3.1) (2022-02-02)
+
+
+### Bug Fixes
+
+* allow rename to fail upto three times before crashing the application ([#320](https://github.com/linz/simple-snowball-sync/issues/320)) ([d5dbe33](https://github.com/linz/simple-snowball-sync/commit/d5dbe335ee80f16dc26d75cb4f8af9ffcd84d68c))
+
+
+
 # [1.3.0](https://github.com/linz/simple-snowball-sync/compare/v1.2.0...v1.3.0) (2021-11-02)
 
 
