@@ -23,7 +23,7 @@
     "@linzjs/s3fs": "^6.3.0",
     "@oclif/command": "^1.8.0",
     "aws-sdk": "^2.888.0",
-    "p-limit": "^3.1.0",
+    "p-limit": "^4.0.0",
     "pino": "^7.6.5",
     "pretty-json-log": "^0.3.2",
     "sinon": "^11.1.1",
