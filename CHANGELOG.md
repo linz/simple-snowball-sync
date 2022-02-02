@@ -1,3 +1,12 @@
+## [1.3.2](https://github.com/linz/simple-snowball-sync/compare/v1.3.1...v1.3.2) (2022-02-02)
+
+
+### Bug Fixes
+
+* throw errors rather than quitting the sync ([3662cf5](https://github.com/linz/simple-snowball-sync/commit/3662cf5d9ebabfe6c8a2474c353168f5aa1b64c5))
+
+
+
 ## [1.3.1](https://github.com/linz/simple-snowball-sync/compare/v1.3.0...v1.3.1) (2022-02-02)
 
 
