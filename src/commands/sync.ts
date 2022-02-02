@@ -170,7 +170,7 @@ export class SnowballSync extends Command {
         this.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
       }).catch((err) => {
         logger.error({ err, path: this.manifest.file(file) }, 'UploadFailed');
-        process.exit(1);
+        throw err;
       });
 
       promises.push(p);
