@@ -138,6 +138,8 @@ export class ManifestLoader {
     return this._dirtyTimeout != null;
   }
 
+  renameFailures: Error[] = [];
+  renameFailuresMax = 3;
   _dirtyTimeout: NodeJS.Timer | null = null;
   dirty(): void {
     if (this._dirtyTimeout != null) return;
@@ -148,7 +150,19 @@ export class ManifestLoader {
       const outputData = JSON.stringify(this.toJson(), null, 2);
 
       await fs.writeFile(this.sourcePath + BackupExtension, outputData);
-      await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
+      try {
+        await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
+        this.renameFailures = [];
+      } catch (err) {
+        this.renameFailures.push(err as Error);
+        logger.info(
+          { err, count: this.renameFailures.length, duration: Date.now() - startTime },
+          'Manifest:Update:Failed',
+        );
+
+        if (this.renameFailures.length > this.renameFailuresMax) throw err;
+        return;
+      }
 
       logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);
