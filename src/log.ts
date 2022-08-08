@@ -16,10 +16,10 @@ export type LogType = typeof logger;
 
 const sts = new STS();
 /** Load the AWS User */
-async function getCaller(): Promise<string | undefined> {
+async function getCaller(): Promise<{ userId?: string; accountId?: string } | undefined> {
   try {
     const ret = await sts.getCallerIdentity().promise();
-    return ret.UserId;
+    return { userId: ret.UserId, accountId: ret.Account };
   } catch (e) {
     return;
   }
@@ -29,8 +29,7 @@ export async function setupLogger(cmd: string, flags: { verbose: boolean }): Pro
 
   const log = logger.child({ id: LogId });
 
-  const userId = await getCaller();
-
-  log.info({ command: { package: '@linzjs/simple-snowball-sync', cmd, ...getVersion() }, userId }, 'Command:Start');
+  const caller = await getCaller();
+  log.info({ command: { package: '@linzjs/simple-snowball-sync', cmd, ...getVersion() }, ...caller }, 'Command:Start');
   return log;
 }
