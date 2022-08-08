@@ -46,5 +46,5 @@ function createManifest(): ManifestLoader {
     size: 12141773487666,
     files: [{ path: 'folder A/Folder 2/fileA.tif', size: 150, hash: 'abc' }],
   };
-  return new ManifestLoader(manifestData.path, manifestData);
+  return new ManifestLoader(manifestData.path, manifestData, null as any);
 }

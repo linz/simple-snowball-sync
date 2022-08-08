@@ -8,12 +8,11 @@ import { performance } from 'perf_hooks';
 import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
-import { logger } from '../log';
+import { LogType, setupLogger } from '../log';
 import { ManifestFile } from '../manifest';
 import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
 import { uploadFile } from '../upload';
-import { getVersion } from '../version';
 import { endpoint, target, verbose } from './common';
 import { hashFiles } from './hash';
 
@@ -55,7 +54,9 @@ class SyncState {
   concurrency: number;
   scan: boolean;
   Q: pLimit.Limit;
+  logger: LogType;
 }
+const state = new SyncState();
 
 export const commandSync = command({
   name: 'sync',
@@ -84,22 +85,24 @@ export const commandSync = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
+    const logger = await setupLogger('sync', args);
+    state.logger = logger;
+
     const target = args.target;
 
     FsS3.parse(target); // Asserts target is a s3 uri
     if (target == null) throw new Error('--target must be in the format s3://bucket/prefix');
     client = await registerSnowball(args, logger);
 
-    logger.info({ target, concurrency: args.concurrency, endpoint: args.endpoint, ...getVersion() }, 'Sync:Start');
+    logger.info({ target, concurrency: args.concurrency, endpoint: args.endpoint }, 'Sync:Start');
 
     // Only use tar compression if uploading to a snowball
     if (args.endpoint == null) args.filter = -1;
 
     if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
 
-    const state = new SyncState();
-    state.manifest = await ManifestLoader.load(args.manifest);
-    if (await isDifferentManifestExist(state.manifest, target)) {
+    state.manifest = await ManifestLoader.load(args.manifest, logger);
+    if (await isDifferentManifestExist(state.manifest, target, logger)) {
       throw new Error('The existing manifest in the target directory contains different files.');
     }
     logger.info({ correlationId: state.manifest.correlationId }, 'Sync:Manifest');
@@ -143,7 +146,7 @@ export const commandSync = command({
     const missingHashes = state.manifest.filter((f) => f.hash == null);
     if (missingHashes.length > 0) {
       logger.warn({ count: missingHashes.length }, 'MissingHashes');
-      await hashFiles(missingHashes, state.manifest);
+      await hashFiles(missingHashes, state.manifest, logger);
     }
     logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
   },
@@ -162,14 +165,17 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
       const existing = fileMap.get(file.path);
       if (existing == null) continue;
       if (existing.size !== file.size) {
-        logger.warn({ path: file.path, sourceSize: existing.size, targetSize: file.size }, 'Upload:Scan:Mismatch');
+        state.logger.warn(
+          { path: file.path, sourceSize: existing.size, targetSize: file.size },
+          'Upload:Scan:Mismatch',
+        );
       } else {
         fileMap.delete(file.path);
       }
     }
     // Filter the list down to all the files
     if (fileMap.size !== files.length) {
-      logger.info({ existing: files.length - fileMap.size, todo: fileMap.size }, 'Upload:Scan:Existing');
+      state.logger.info({ existing: files.length - fileMap.size, todo: fileMap.size }, 'Upload:Scan:Existing');
       files = [...fileMap.values()];
     }
   } else {
@@ -177,7 +183,7 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
     files = files.filter((f) => f.hash == null);
   }
 
-  logger.info({ startOffset: 0, files: files.length }, 'Upload:Start');
+  state.logger.info({ startOffset: 0, files: files.length }, 'Upload:Start');
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     const p = state
@@ -194,7 +200,7 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         };
         const targetUri = fsa.join(target, file.path);
 
-        logger.debug(
+        state.logger.debug(
           { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
           'Upload:Start',
         );
@@ -205,13 +211,13 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         state.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
       })
       .catch((err) => {
-        logger.error({ err, path: state.manifest.file(file) }, 'UploadFailed');
+        state.logger.error({ err, path: state.manifest.file(file) }, 'Upload:Failed');
         throw err;
       });
 
     promises.push(p);
     if (promises.length > 1000) {
-      logger.debug({ index }, 'Upload:Join');
+      state.logger.debug({ index }, 'Upload:Join');
       await Promise.all(promises);
       promises = [];
     }
@@ -221,7 +227,7 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
 }
 
 async function uploadSmallFiles(state: SyncState, files: ManifestFile[], target: string): Promise<void> {
-  let log = logger.child({ type: 'tar' });
+  let log = state.logger.child({ type: 'tar' });
   const { bucket, key } = FsS3.parse(target);
 
   let tarIndex = 0;
@@ -292,7 +298,7 @@ function watchStats(): void {
     const speed = Number((movedMb / totalTime).toFixed(2));
 
     const percent = ((Stats.progressSize / Stats.totalSize) * 100).toFixed(3);
-    logger.info({ count: Stats.count, percent, movedMb, speed, duration }, 'Upload:Progress');
+    state.logger.info({ count: Stats.count, percent, movedMb, speed, duration }, 'Upload:Progress');
   }, 5000);
   logInterval.unref();
 }

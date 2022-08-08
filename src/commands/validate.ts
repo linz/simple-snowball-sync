@@ -2,10 +2,9 @@ import { fsa } from '@linzjs/s3fs';
 import { command, option, positional, string } from 'cmd-ts';
 import pLimit from 'p-limit';
 import { hashFile } from '../hash';
-import { logger } from '../log';
+import { setupLogger } from '../log';
 import { ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
-import { getVersion } from '../version';
 import { endpoint, target, verbose } from './common';
 
 const Q = pLimit(5);
@@ -21,12 +20,10 @@ export const commandValidate = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    if (args.verbose) logger.level = 'trace';
-    logger.info(getVersion(), 'Validate:Start');
-
+    const logger = await setupLogger('validate', args);
     await registerSnowball(args, logger);
 
-    const manifest = await ManifestLoader.load(args.manifest);
+    const manifest = await ManifestLoader.load(args.manifest, logger);
     logger.info({ correlationId: manifest.correlationId }, 'Validate:Manifest');
 
     const targetPath = args.target ?? manifest.dataPath;
@@ -34,7 +31,7 @@ export const commandValidate = command({
     // Validate all the files exist
     logger.info('Validate:FileList');
     const expectedFiles = new Map(manifest.files);
-    const targetManifest = await ManifestLoader.create('/never', targetPath);
+    const targetManifest = await ManifestLoader.create('/never', targetPath, logger);
     const extraFiles = new Set<string>();
 
     for (const file of targetManifest.files.values()) {

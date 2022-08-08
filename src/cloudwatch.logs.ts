@@ -1,7 +1,6 @@
 import { CloudWatchLogs } from 'aws-sdk';
 import { createInterface, Interface } from 'readline';
 import { Readable } from 'stream';
-import { logger } from './log';
 
 const region = process.env['AWS_REGION'] ?? process.env['AWS_DEFAULT_REGION'] ?? 'ap-southeast-2';
 
@@ -63,7 +62,7 @@ export class CloudWatchStream {
   /** Something went wrong log a error and stop processing logs*/
   private fail(err: unknown): void {
     this.isFailed = true;
-    logger.error({ err: err }, 'CloudWatch:Failed');
+    console.error({ err }, 'CloudWatch:Failed');
     if (this.sendTimeout) clearTimeout(this.sendTimeout);
     this.rl.off('line', this.process);
   }

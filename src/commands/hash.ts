@@ -3,11 +3,10 @@ import { boolean, command, flag, positional, string } from 'cmd-ts';
 import pLimit from 'p-limit';
 import { performance } from 'perf_hooks';
 import { hashFile } from '../hash';
-import { logger } from '../log';
+import { LogType, setupLogger } from '../log';
 import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
-import { getVersion } from '../version';
 import { endpoint, verbose } from './common';
 
 export const commandHash = command({
@@ -20,11 +19,9 @@ export const commandHash = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    if (args.verbose) logger.level = 'trace';
+    const logger = await setupLogger('hash', args);
     await registerSnowball(args, logger);
-
-    logger.info(getVersion(), 'Hash:Start');
-    const manifest = await ManifestLoader.load(args.manifest);
+    const manifest = await ManifestLoader.load(args.manifest, logger);
     logger.info({ correlationId: manifest.correlationId }, 'Hash:Manifest');
 
     const toHash = args.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
@@ -35,7 +32,7 @@ export const commandHash = command({
     }
     logger.debug({ total: toHash.length }, 'Hash:File');
 
-    await hashFiles(toHash, manifest);
+    await hashFiles(toHash, manifest, logger);
 
     await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
     logger.info(
@@ -45,7 +42,12 @@ export const commandHash = command({
   },
 });
 
-export async function hashFiles(toHash: ManifestFile[], manifest: ManifestLoader, Q = pLimit(5)): Promise<void> {
+export async function hashFiles(
+  toHash: ManifestFile[],
+  manifest: ManifestLoader,
+  logger: LogType,
+  Q = pLimit(5),
+): Promise<void> {
   let count = 0;
   let startTime = performance.now();
 

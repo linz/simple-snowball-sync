@@ -1,7 +1,7 @@
 import { fsa } from '@linzjs/s3fs';
 import { promises as fs } from 'fs';
 import { ulid } from 'ulid';
-import { logger } from './log';
+import { LogType } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
 const BackupExtension = '.1';
@@ -41,12 +41,16 @@ export function isManifestsDifferent(manifestA: ManifestLoader, manifestB: Manif
  * @param destPath The destination directory path (where files will be uploaded).
  * @returns true if a manifest containing different files exists in the destination directory.
  */
-export async function isDifferentManifestExist(currentManifest: ManifestLoader, destPath: string): Promise<boolean> {
+export async function isDifferentManifestExist(
+  currentManifest: ManifestLoader,
+  destPath: string,
+  logger: LogType,
+): Promise<boolean> {
   const existingManifestPath = fsa.join(destPath, ManifestFileName);
   const isManifestExist = await fsa.exists(existingManifestPath);
 
   if (isManifestExist) {
-    const existingManifest = await ManifestLoader.load(existingManifestPath);
+    const existingManifest = await ManifestLoader.load(existingManifestPath, logger);
     logger.info({ existingManifest }, 'CheckTargetDir');
 
     if (isManifestsDifferent(currentManifest, existingManifest)) return true;
@@ -62,8 +66,9 @@ export class ManifestLoader {
   sourcePath: string;
   correlationId: string;
   size: number;
+  logger: LogType;
 
-  constructor(sourcePath: string, manifest: Manifest) {
+  constructor(sourcePath: string, manifest: Manifest, log: LogType) {
     this.sourcePath = sourcePath;
     this.dataPath = manifest.path;
     this.size = manifest.size;
@@ -72,6 +77,7 @@ export class ManifestLoader {
       file.path = ManifestLoader.normalize(file.path);
       this.files.set(file.path, file);
     }
+    this.logger = log;
   }
 
   file(fileName: string | ManifestFile): string {
@@ -79,15 +85,15 @@ export class ManifestLoader {
     return fsa.join(this.dataPath, fileName.path);
   }
 
-  static async load(fileName: string): Promise<ManifestLoader> {
+  static async load(fileName: string, log: LogType): Promise<ManifestLoader> {
     if (!isManifestPath(fileName)) throw new Error('Invalid manifest path ' + fileName);
     const buf = await fsa.read(fileName);
     try {
       const manifest: Manifest = JSON.parse(buf.toString());
-      return new ManifestLoader(fileName, manifest);
+      return new ManifestLoader(fileName, manifest, log);
     } catch (e) {
       if (fileName.endsWith(BackupExtension)) throw e;
-      return this.load(fileName + BackupExtension);
+      return this.load(fileName + BackupExtension, log);
     }
   }
 
@@ -109,17 +115,17 @@ export class ManifestLoader {
     }
   }
 
-  static async create(outputPath: string, inputPath: string): Promise<ManifestLoader> {
+  static async create(outputPath: string, inputPath: string, log: LogType): Promise<ManifestLoader> {
     const manifest: Manifest = { path: inputPath, size: 0, files: [] };
     for await (const rec of this.list(inputPath)) {
       manifest.size += rec.size;
       manifest.files.push(rec);
       if (manifest.files.length % 5_000 === 0) {
-        logger.info({ count: manifest.files.length, path: rec.path }, 'Manifest:Progress');
+        log.info({ count: manifest.files.length, path: rec.path }, 'Manifest:Progress');
       }
     }
 
-    return new ManifestLoader(outputPath, manifest);
+    return new ManifestLoader(outputPath, manifest, log);
   }
 
   setHash(path: string, hash: string): void {
@@ -158,7 +164,7 @@ export class ManifestLoader {
         this.renameFailures = [];
       } catch (err) {
         this.renameFailures.push(err as Error);
-        logger.info(
+        this.logger.info(
           { err, count: this.renameFailures.length, duration: Date.now() - startTime },
           'Manifest:Update:Failed',
         );
@@ -167,7 +173,7 @@ export class ManifestLoader {
         return;
       }
 
-      logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
+      this.logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
     }, 15_000);
     this._dirtyTimeout.unref();
   }
