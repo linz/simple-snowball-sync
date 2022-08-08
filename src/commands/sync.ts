@@ -294,8 +294,8 @@ function watchStats(): void {
 
     const duration = msSince(lastTick);
     lastTick = performance.now();
-    const totalTime = lastTick - startTime;
-    const speed = Number((movedMb / totalTime).toFixed(2));
+    const totalTimeSeconds = (lastTick - startTime) / 1000;
+    const speed = Number((movedMb / totalTimeSeconds).toFixed(2));
 
     const percent = ((Stats.progressSize / Stats.totalSize) * 100).toFixed(3);
     state.logger.info({ count: Stats.count, percent, movedMb, speed, duration }, 'Upload:Progress');
