@@ -74,6 +74,7 @@ export class CloudWatchStream {
   private putLogs = async (): Promise<void> => {
     await this.init();
     const logs = this.logs;
+    if (logs.length === 0) return;
     this.logs = [];
     this.logsSize = 0;
     if (this.isFailed) return;
