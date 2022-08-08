@@ -1,3 +1,12 @@
+## [1.4.1](https://github.com/linz/simple-snowball-sync/compare/v1.4.0...v1.4.1) (2022-08-08)
+
+
+### Features
+
+* include caller accountId ([4aefcc6](https://github.com/linz/simple-snowball-sync/commit/4aefcc6ef0bb6d799ef063d1bf2e12fa5234df85))
+
+
+
 # [1.4.0](https://github.com/linz/simple-snowball-sync/compare/v1.3.2...v1.4.0) (2022-08-08)
 
 
