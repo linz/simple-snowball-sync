@@ -2,7 +2,7 @@ import { fsa, FsS3 } from '@linzjs/s3fs';
 import { command, positional, string } from 'cmd-ts';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { logger } from '../log';
+import { LogType, setupLogger } from '../log';
 import { ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
 import { getVersion } from '../version';
@@ -17,12 +17,11 @@ export const commandManifest = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    if (args.verbose) logger.level = 'trace';
+    const logger = setupLogger('manifest', args);
 
     await registerSnowball(args, logger);
-    logger.info(getVersion(), 'Manifest:Start');
 
-    const inputPath = await parseInputPath(args.manifest);
+    const inputPath = await parseInputPath(args.manifest, logger);
     if (inputPath == null) return;
 
     const pathReg = new RegExp('\\' + path.sep, 'g');
@@ -32,7 +31,7 @@ export const commandManifest = command({
       '.' +
       ManifestFileName;
 
-    const manifest = await ManifestLoader.create(manifestName, inputPath);
+    const manifest = await ManifestLoader.create(manifestName, inputPath, logger);
 
     await fsa.write(manifestName, Buffer.from((await manifest).toJsonString()));
     logger.info(
@@ -42,7 +41,7 @@ export const commandManifest = command({
   },
 });
 
-async function parseInputPath(input: string): Promise<string | null> {
+async function parseInputPath(input: string, logger: LogType): Promise<string | null> {
   if (input.startsWith('s3://')) {
     const res = FsS3.parse(input);
     if (res == null) return null;

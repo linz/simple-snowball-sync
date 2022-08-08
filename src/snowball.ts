@@ -1,6 +1,6 @@
 import { fsa, FsS3 } from '@linzjs/s3fs';
 import S3 from 'aws-sdk/clients/s3';
-import { logger, LogType } from './log';
+import { LogType } from './log';
 import * as path from 'path';
 import * as os from 'os';
 import * as AWS from 'aws-sdk';
@@ -11,8 +11,6 @@ export async function registerSnowball(
   flags: { target?: string; endpoint?: string; verbose?: boolean },
   log: LogType,
 ): Promise<S3> {
-  if (flags.verbose) logger.level = 'debug';
-
   let endpoint = flags.endpoint;
   if (endpoint != null && !endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
 
