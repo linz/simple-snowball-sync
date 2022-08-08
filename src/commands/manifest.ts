@@ -16,7 +16,7 @@ export const commandManifest = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    const logger = setupLogger('manifest', args);
+    const logger = await setupLogger('manifest', args);
 
     await registerSnowball(args, logger);
 

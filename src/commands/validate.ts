@@ -20,8 +20,7 @@ export const commandValidate = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    const logger = setupLogger('validate', args);
-
+    const logger = await setupLogger('validate', args);
     await registerSnowball(args, logger);
 
     const manifest = await ManifestLoader.load(args.manifest, logger);

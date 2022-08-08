@@ -19,7 +19,7 @@ export const commandHash = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    const logger = setupLogger('hash', args);
+    const logger = await setupLogger('hash', args);
     await registerSnowball(args, logger);
     const manifest = await ManifestLoader.load(args.manifest, logger);
     logger.info({ correlationId: manifest.correlationId }, 'Hash:Manifest');

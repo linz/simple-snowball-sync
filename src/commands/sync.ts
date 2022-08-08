@@ -85,7 +85,7 @@ export const commandSync = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
-    const logger = setupLogger('sync', args);
+    const logger = await setupLogger('sync', args);
     state.logger = logger;
 
     const target = args.target;

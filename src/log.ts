@@ -1,3 +1,4 @@
+import { STS } from 'aws-sdk';
 import pino from 'pino';
 import { PrettyTransform } from 'pretty-json-log';
 import { PassThrough } from 'stream';
@@ -13,12 +14,24 @@ export const cloudWatchStream = new CloudWatchStream(outputStream, { logStream: 
 const logger = pino(outputStream).child({});
 export type LogType = typeof logger;
 
-export function setupLogger(cmd: string, flags: { verbose: boolean }): LogType {
+const sts = new STS();
+/** Load the AWS User */
+async function getCaller(): Promise<string | undefined> {
+  try {
+    const ret = await sts.getCallerIdentity().promise();
+    return ret.UserId;
+  } catch (e) {
+    return;
+  }
+}
+export async function setupLogger(cmd: string, flags: { verbose: boolean }): Promise<LogType> {
   if (flags.verbose) logger.level = 'trace';
   console.log('SetupLogger', cmd);
 
   const log = logger.child({ id: LogId });
 
-  log.info({ command: { package: '@linzjs/simple-snowball-sync', cmd, ...getVersion() } }, 'Command:Start');
+  const user = await getCaller();
+
+  log.info({ command: { package: '@linzjs/simple-snowball-sync', cmd, ...getVersion() }, user }, 'Command:Start');
   return log;
 }
