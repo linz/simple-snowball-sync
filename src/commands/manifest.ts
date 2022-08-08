@@ -5,7 +5,6 @@ import * as path from 'path';
 import { LogType, setupLogger } from '../log';
 import { ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
-import { getVersion } from '../version';
 import { endpoint, verbose } from './common';
 
 export const commandManifest = command({

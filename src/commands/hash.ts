@@ -7,7 +7,6 @@ import { LogType, setupLogger } from '../log';
 import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
-import { getVersion } from '../version';
 import { endpoint, verbose } from './common';
 
 export const commandHash = command({

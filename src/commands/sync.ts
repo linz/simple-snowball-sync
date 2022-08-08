@@ -13,7 +13,6 @@ import { ManifestFile } from '../manifest';
 import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
 import { uploadFile } from '../upload';
-import { getVersion } from '../version';
 import { endpoint, target, verbose } from './common';
 import { hashFiles } from './hash';
 
