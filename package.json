@@ -25,7 +25,7 @@
     "ospec": "^4.0.1",
     "p-limit": "^3.1.0",
     "pino": "^7.6.5",
-    "pretty-json-log": "^0.3.2",
+    "pretty-json-log": "^1.1.0",
     "sinon": "^11.1.1",
     "tar-stream": "^2.2.0",
     "ulid": "^2.3.0"

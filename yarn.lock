@@ -2031,13 +2031,13 @@ prettier@^2.7.1:
   resolved "https://registry.yarnpkg.com/prettier/-/prettier-2.7.1.tgz#e235806850d057f97bb08368a4f7d899f7760c64"
   integrity sha512-ujppO+MkdPqoVINuDFDRLClm7D78qbDt0/NR+wp5FqEZOoTNAjPHWj17QRhu7geIHJfcNhRk1XVQmF8Bp3ye+g==
 
-pretty-json-log@^0.3.2:
-  version "0.3.2"
-  resolved "https://registry.yarnpkg.com/pretty-json-log/-/pretty-json-log-0.3.2.tgz#9bd22d452ea005a3c293f5a641a6ec3d17cc83f5"
-  integrity sha512-dPjFb2RNFPUdGKIGCyfqeslmkqZZxPxq4UbLMJJZDs0y+GMYZfWo3FmT1VYAgcehbXTXRhNPcAlgbTWgUAQEHw==
+pretty-json-log@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/pretty-json-log/-/pretty-json-log-1.1.0.tgz#ce62dd3a76f9e71620b350cfd68e802613df639a"
+  integrity sha512-V2esub2srHzZR7ucEIBPSfjfvspsm5AY9jxtdz6b+uppv+kpD1vekWutbAM/d/jDU6M29EbgCqtxskfAqCG9JA==
   dependencies:
     ansi-colors "^4.1.1"
-    split2 "^3.1.1"
+    split2 "^4.1.0"
 
 process-nextick-args@~2.0.0:
   version "2.0.1"
@@ -2361,14 +2361,14 @@ spdx-license-ids@^3.0.0:
   resolved "https://registry.yarnpkg.com/spdx-license-ids/-/spdx-license-ids-3.0.7.tgz#e9c18a410e5ed7e12442a549fbd8afa767038d65"
   integrity sha512-U+MTEOO0AiDzxwFvoa4JVnMV6mZlJKk2sBLt90s7G0Gd0Mlknc7kxEn3nuDPNZRta7O2uy8oLcZLVT+4sqNZHQ==
 
-split2@^3.0.0, split2@^3.1.1:
+split2@^3.0.0:
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/split2/-/split2-3.2.2.tgz#bf2cf2a37d838312c249c89206fd7a17dd12365f"
   integrity sha512-9NThjpgZnifTkJpzTZ7Eue85S49QwpNhZTq6GRJwObb6jnLFNGB7Qm73V5HewTROPyxD0C29xqmaI68bQtV+hg==
   dependencies:
     readable-stream "^3.0.0"
 
-split2@^4.0.0:
+split2@^4.0.0, split2@^4.1.0:
   version "4.1.0"
   resolved "https://registry.yarnpkg.com/split2/-/split2-4.1.0.tgz#101907a24370f85bb782f08adaabe4e281ecf809"
   integrity sha512-VBiJxFkxiXRlUIeyMQi8s4hgvKCSjtknJv/LVYbrgALPwf5zSKmEwV9Lst25AkvMDnvxODugjdl6KZgwKM1WYQ==
