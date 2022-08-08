@@ -124,15 +124,15 @@ export const commandSync = command({
 
     watchStats();
 
-    // Upload larger files
-    await uploadBigFiles(state, bigFiles, target);
-    // Tar small files and upload them
-    await uploadSmallFiles(state, smallFiles, target);
+    // Upload larger files and Tar small files and upload them
+    if (bigFiles.length > 0) await uploadBigFiles(state, bigFiles, target);
+    if (smallFiles.length > 0) await uploadSmallFiles(state, smallFiles, target);
 
     // Force a scan after the upload completes
     if (state.scan === false) {
       state.scan = true;
-      await uploadBigFiles(state, bigFiles, target);
+      if (bigFiles.length > 0) await uploadBigFiles(state, bigFiles, target);
+      if (smallFiles.length > 0) await uploadSmallFiles(state, smallFiles, target);
     }
 
     const manifestJson = Buffer.from(state.manifest.toJsonString());
@@ -183,8 +183,9 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
     // Only upload files that have no hash
     files = files.filter((f) => f.hash == null);
   }
+  if (files.length === 0) return;
 
-  state.logger.info({ startOffset: 0, files: files.length }, 'Upload:Start');
+  state.logger.info({ index: 0, files: files.length }, 'Upload:Start');
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     const p = state
@@ -194,17 +195,13 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         const fileStream = fsa.readStream(state.manifest.file(file));
         fileStream.on('data', (chunk) => hash.update(chunk));
 
-        const uploadCtx = {
-          Bucket: bucket,
-          Key: path.join(key ?? '', file.path),
-          Body: fileStream,
-        };
+        const uploadCtx = { Bucket: bucket, Key: path.join(key ?? '', file.path), Body: fileStream };
         const targetUri = fsa.join(target, file.path);
 
         const startTime = performance.now();
         state.logger.trace(
-          { count: index, total: files.length, path: file.path, size: file.size, target: targetUri },
-          'Upload:Start',
+          { index, total: files.length, path: file.path, size: file.size, target: targetUri },
+          'Upload:File:Start',
         );
         await uploadFile(client, uploadCtx);
         Stats.count++;
@@ -213,18 +210,18 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         state.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
         state.logger.debug(
           {
-            count: index,
+            index,
             total: files.length,
             path: file.path,
             size: file.size,
             target: targetUri,
             duration: msSince(startTime),
           },
-          'Upload:Done',
+          'Upload:File:Done',
         );
       })
       .catch((err) => {
-        state.logger.error({ err, path: state.manifest.file(file) }, 'Upload:Failed');
+        state.logger.error({ err, path: file.path }, 'Upload:File:Failed');
         throw err;
       });
 
@@ -235,7 +232,6 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
       promises = [];
     }
   }
-
   await Promise.all(promises);
 }
 

@@ -6,6 +6,8 @@ import { msSince } from './commands/common';
 import { LogType } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
+const ManifestFlushTimeoutSeconds = 15_000;
+
 const BackupExtension = '.1';
 export const ManifestFileName = 'manifest.json';
 
@@ -151,41 +153,60 @@ export class ManifestLoader {
 
   renameFailures: Error[] = [];
   renameFailuresMax = 3;
+
   _dirtyTimeout: NodeJS.Timer | null = null;
   dirty(): void {
     if (this._dirtyTimeout != null) return;
-    this._dirtyTimeout = setTimeout(async () => {
-      this._dirtyTimeout = null;
-
-      const metrics: Record<string, number> = {};
-      const startTime = performance.now();
-      const outputData = JSON.stringify(this.toJson(), null, 2);
-      metrics['manifest:json'] = msSince(startTime);
-
-      const writeTime = performance.now();
-      await fs.writeFile(this.sourcePath + BackupExtension, outputData);
-      metrics['manifest:write'] = msSince(writeTime);
-      try {
-        const renameTime = performance.now();
-        await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
-        metrics['manifest:rename'] = msSince(renameTime);
-
-        this.renameFailures = [];
-      } catch (err) {
-        this.renameFailures.push(err as Error);
-        this.logger.info(
-          { err, count: this.renameFailures.length, metrics, duration: msSince(startTime) },
-          'Manifest:Update:Failed',
-        );
-
-        if (this.renameFailures.length > this.renameFailuresMax) throw err;
-        return;
-      }
-
-      this.logger.info({ metrics, duration: msSince(startTime) }, 'Manifest:Update');
-    }, 15_000);
+    this._dirtyTimeout = setTimeout(this.flush, ManifestFlushTimeoutSeconds);
     this._dirtyTimeout.unref();
   }
+
+  /** Limit tthe flush to happen one at a time */
+  _flushPromise: Promise<void> | null;
+  /** Number of times flush has been called */
+  _flushCount = 0;
+
+  flush = (): void => {
+    if (this._dirtyTimeout) clearTimeout(this._dirtyTimeout);
+    this._dirtyTimeout = null;
+    const flushId = this._flushCount++;
+    this.logger.debug({ flushId }, 'Manifest:Update:Schedule');
+    const scheduleTime = performance.now();
+
+    if (this._flushPromise == null) this._flushPromise = Promise.resolve();
+    this._flushPromise = this._flushPromise
+      .then(async () => {
+        const metrics: Record<string, number> = {};
+        metrics['manifest:schedule'] = msSince(scheduleTime);
+
+        const startTime = performance.now();
+        const outputData = JSON.stringify(this.toJson(), null, 2);
+        metrics['manifest:json'] = msSince(startTime);
+
+        const writeTime = performance.now();
+        await fs.writeFile(this.sourcePath + BackupExtension, outputData);
+        metrics['manifest:write'] = msSince(writeTime);
+        try {
+          const renameTime = performance.now();
+          await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
+          metrics['manifest:rename'] = msSince(renameTime);
+
+          this.renameFailures = [];
+        } catch (err) {
+          this.renameFailures.push(err as Error);
+          this.logger.info(
+            { flushId, err, count: this.renameFailures.length, metrics, duration: msSince(startTime) },
+            'Manifest:Update:Failed',
+          );
+
+          if (this.renameFailures.length > this.renameFailuresMax) throw err;
+          return;
+        }
+
+        this.logger.info({ flushId, metrics, duration: msSince(startTime) }, 'Manifest:Update');
+      })
+      .catch((err) => this.logger.error({ flushId, err }, 'Manifest:Write:Failed'));
+  };
 
   toJson(): Manifest {
     const files = [];
