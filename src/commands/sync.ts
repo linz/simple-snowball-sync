@@ -13,12 +13,8 @@ import { ManifestFile } from '../manifest';
 import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
 import { uploadFile } from '../upload';
-import { endpoint, target, verbose } from './common';
+import { endpoint, msSince, target, verbose } from './common';
 import { hashFiles } from './hash';
-
-function msSince(lastTick: number): number {
-  return Math.floor((performance.now() - lastTick) / 1000) * 1000;
-}
 
 const Stats = {
   /** Files uploaded over all runs */
@@ -85,6 +81,8 @@ export const commandSync = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
+    const startTime = performance.now();
+
     const logger = await setupLogger('sync', args);
     state.logger = logger;
 
@@ -148,7 +146,10 @@ export const commandSync = command({
       logger.warn({ count: missingHashes.length }, 'MissingHashes');
       await hashFiles(missingHashes, state.manifest, logger);
     }
-    logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
+    logger.info(
+      { sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count, duration: msSince(startTime) },
+      'Sync:Done',
+    );
   },
 });
 
