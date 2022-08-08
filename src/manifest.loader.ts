@@ -1,6 +1,8 @@
 import { fsa } from '@linzjs/s3fs';
 import { promises as fs } from 'fs';
+import { performance } from 'perf_hooks';
 import { ulid } from 'ulid';
+import { msSince } from './commands/common';
 import { LogType } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
@@ -155,17 +157,24 @@ export class ManifestLoader {
     this._dirtyTimeout = setTimeout(async () => {
       this._dirtyTimeout = null;
 
-      const startTime = Date.now();
+      const metrics: Record<string, number> = {};
+      const startTime = performance.now();
       const outputData = JSON.stringify(this.toJson(), null, 2);
+      metrics['manifest:json'] = msSince(startTime);
 
+      const writeTime = performance.now();
       await fs.writeFile(this.sourcePath + BackupExtension, outputData);
+      metrics['manifest:write'] = msSince(writeTime);
       try {
+        const renameTime = performance.now();
         await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
+        metrics['manifest:rename'] = msSince(renameTime);
+
         this.renameFailures = [];
       } catch (err) {
         this.renameFailures.push(err as Error);
         this.logger.info(
-          { err, count: this.renameFailures.length, duration: Date.now() - startTime },
+          { err, count: this.renameFailures.length, metrics, duration: msSince(startTime) },
           'Manifest:Update:Failed',
         );
 
@@ -173,7 +182,7 @@ export class ManifestLoader {
         return;
       }
 
-      this.logger.info({ duration: Date.now() - startTime }, 'Manifest:Update');
+      this.logger.info({ metrics, duration: msSince(startTime) }, 'Manifest:Update');
     }, 15_000);
     this._dirtyTimeout.unref();
   }
