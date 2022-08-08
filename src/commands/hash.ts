@@ -1,30 +1,31 @@
 import { fsa } from '@linzjs/s3fs';
-import Command, { flags } from '@oclif/command';
+import { boolean, command, flag, positional, string } from 'cmd-ts';
 import pLimit from 'p-limit';
+import { performance } from 'perf_hooks';
 import { hashFile } from '../hash';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
 import { ManifestLoader } from '../manifest.loader';
-import { registerSnowball, SnowballArgs } from '../snowball';
+import { registerSnowball } from '../snowball';
 import { getVersion } from '../version';
+import { endpoint, verbose } from './common';
 
-export class HashManifest extends Command {
-  static flags = {
-    verbose: SnowballArgs.verbose,
-    endpoint: SnowballArgs.endpoint,
-    force: flags.boolean({ description: 'Force rehash all files' }),
-  };
-
-  static args = [{ name: 'manifest', required: true }];
-
-  async run(): Promise<void> {
-    const { args, flags } = this.parse(HashManifest);
-    await registerSnowball(flags, logger);
+export const commandHash = command({
+  name: 'hash',
+  description: 'Hash manifest files',
+  args: {
+    verbose,
+    endpoint,
+    force: flag({ long: 'force', description: 'Force rehash all files', type: boolean }),
+    manifest: positional({ type: string, displayName: 'MANIFEST' }),
+  },
+  handler: async (args) => {
+    if (args.verbose) logger.level = 'trace';
+    await registerSnowball(args, logger);
     logger.info(getVersion(), 'Hash:Start');
-
     const manifest = await ManifestLoader.load(args.manifest);
 
-    const toHash = flags.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
+    const toHash = args.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
     if (toHash.length === 0) {
       await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
       logger.info({ path: args.manifest, total: manifest.files.size }, 'Hash:Done');
@@ -35,12 +36,13 @@ export class HashManifest extends Command {
     await hashFiles(toHash, manifest);
 
     await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
-    logger.info({ path: args.inputFile, count: manifest.files.size }, 'Hash:Done');
-  }
-}
+    logger.info({ path: args.manifest, count: manifest.files.size }, 'Hash:Done');
+  },
+});
 
 export async function hashFiles(toHash: ManifestFile[], manifest: ManifestLoader, Q = pLimit(5)): Promise<void> {
   let count = 0;
+  let startTime = performance.now();
 
   const promises = toHash.map((file) => {
     return Q(async () => {
@@ -48,7 +50,11 @@ export async function hashFiles(toHash: ManifestFile[], manifest: ManifestLoader
       const hash = await hashFile(fsa.readStream(manifest.file(file)));
       manifest.setHash(file.path, hash);
       count++;
-      if (count % 1_000 === 0) logger.info({ count, total: toHash.length }, 'Hash:Progress');
+      if (count % 1_000 === 0) {
+        const duration = Number((performance.now() - startTime).toFixed(4));
+        startTime = performance.now();
+        logger.info({ count, total: toHash.length, duration }, 'Hash:Progress');
+      }
     }).catch((error) => logger.error({ error, path: manifest.file(file) }, 'Hash:Failed'));
   });
 

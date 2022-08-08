@@ -1,5 +1,4 @@
 import { fsa, FsS3 } from '@linzjs/s3fs';
-import { flags } from '@oclif/command';
 import S3 from 'aws-sdk/clients/s3';
 import { logger, LogType } from './log';
 import * as path from 'path';
@@ -7,12 +6,6 @@ import * as os from 'os';
 import * as AWS from 'aws-sdk';
 
 FsS3.MaxListCount = 1_000; // Some folders are very large
-
-export const SnowballArgs = {
-  verbose: flags.boolean({ description: 'Verbose logging' }),
-  target: flags.string({ description: 'S3 location to store files' }),
-  endpoint: flags.string({ description: 'Snowball endpoint' }),
-};
 
 export async function registerSnowball(
   flags: { target?: string; endpoint?: string; verbose?: boolean },

@@ -6,27 +6,27 @@
   "scripts": {
     "build": "tsc --pretty",
     "lint": "eslint 'src/**/*.{js,ts,tsx}' --quiet --fix",
+    "bundle": "npx esbuild src/bin.ts --bundle --outfile=bin/sss.cjs --platform=node",
     "test": "ospec build/**/*.test.js",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md"
   },
   "devDependencies": {
-    "@linzjs/style": "^2.1.4",
+    "@linzjs/style": "^3.9.0",
     "@types/node": "^16.0.1",
     "@types/ospec": "^4.0.2",
     "@types/pino": "^6.3.7",
     "@types/sinon": "^10.0.2",
     "@types/tar-stream": "^2.2.0",
+    "conventional-changelog-cli": "^2.1.1",
     "ospec": "^4.0.1",
-    "conventional-changelog-cli": "^2.1.1"
-  },
-  "dependencies": {
+    "sinon": "^11.1.1",
     "@linzjs/s3fs": "^6.3.0",
-    "@oclif/command": "^1.8.0",
     "aws-sdk": "^2.888.0",
+    "cmd-ts": "^0.11.0",
+    "esbuild": "^0.14.53",
     "p-limit": "^3.1.0",
     "pino": "^7.6.5",
     "pretty-json-log": "^0.3.2",
-    "sinon": "^11.1.1",
     "tar-stream": "^2.2.0"
   },
   "files": [
