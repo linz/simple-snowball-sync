@@ -2,7 +2,6 @@ import { fsa, FsS3 } from '@linzjs/s3fs';
 import { command, positional, string } from 'cmd-ts';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { ulid } from 'ulid';
 import { logger } from '../log';
 import { ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';

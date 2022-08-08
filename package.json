@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc --pretty",
-    "lint": "eslint 'src/**/*.{js,ts,tsx}' --quiet --fix",
+    "lint": "eslint . --ignore-path .gitignore --quiet --fix",
     "bundle": "npx esbuild src/bin.ts --bundle --outfile=bin/sss.cjs --platform=node",
     "test": "ospec build/**/*.test.js",
     "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md"
