@@ -2,6 +2,7 @@ import { fsa, FsS3 } from '@linzjs/s3fs';
 import { command, positional, string } from 'cmd-ts';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import { ulid } from 'ulid';
 import { logger } from '../log';
 import { ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
@@ -35,7 +36,10 @@ export const commandManifest = command({
     const manifest = await ManifestLoader.create(manifestName, inputPath);
 
     await fsa.write(manifestName, Buffer.from((await manifest).toJsonString()));
-    logger.info({ path: manifestName, count: manifest.files.size }, 'Manifest:Created');
+    logger.info(
+      { path: manifestName, count: manifest.files.size, correlationId: manifest.correlationId },
+      'Manifest:Created',
+    );
   },
 });
 

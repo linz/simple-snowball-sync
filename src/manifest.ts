@@ -1,6 +1,7 @@
 export interface Manifest {
   path: string;
   size: number;
+  correlationId?: string;
   files: ManifestFile[];
 }
 

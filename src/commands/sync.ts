@@ -102,6 +102,7 @@ export const commandSync = command({
     if (await isDifferentManifestExist(state.manifest, target)) {
       throw new Error('The existing manifest in the target directory contains different files.');
     }
+    logger.info({ correlationId: state.manifest.correlationId }, 'Sync:Manifest');
 
     state.Q = pLimit(args.concurrency);
     state.concurrency = args.concurrency;
