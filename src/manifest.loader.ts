@@ -170,7 +170,7 @@ export class ManifestLoader {
     if (this._dirtyTimeout) clearTimeout(this._dirtyTimeout);
     this._dirtyTimeout = null;
     const flushId = this._flushCount++;
-    this.logger.debug({ flushId }, 'Manifest:Update:Schedule');
+    this.logger.trace({ flushId }, 'Manifest:Update:Schedule');
     const scheduleTime = performance.now();
 
     if (this._flushPromise == null) this._flushPromise = Promise.resolve();
