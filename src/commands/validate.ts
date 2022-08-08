@@ -22,12 +22,12 @@ export const commandValidate = command({
   },
   handler: async (args) => {
     if (args.verbose) logger.level = 'trace';
-
     logger.info(getVersion(), 'Validate:Start');
 
     await registerSnowball(args, logger);
 
     const manifest = await ManifestLoader.load(args.manifest);
+    logger.info({ correlationId: manifest.correlationId }, 'Validate:Manifest');
 
     const targetPath = args.target ?? manifest.dataPath;
 

@@ -35,7 +35,10 @@ export const commandManifest = command({
     const manifest = await ManifestLoader.create(manifestName, inputPath);
 
     await fsa.write(manifestName, Buffer.from((await manifest).toJsonString()));
-    logger.info({ path: manifestName, count: manifest.files.size }, 'Manifest:Created');
+    logger.info(
+      { path: manifestName, count: manifest.files.size, correlationId: manifest.correlationId },
+      'Manifest:Created',
+    );
   },
 });
 

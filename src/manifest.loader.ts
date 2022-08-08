@@ -1,5 +1,6 @@
 import { fsa } from '@linzjs/s3fs';
 import { promises as fs } from 'fs';
+import { ulid } from 'ulid';
 import { logger } from './log';
 import { Manifest, ManifestFile } from './manifest';
 
@@ -59,12 +60,14 @@ export class ManifestLoader {
 
   dataPath: string;
   sourcePath: string;
+  correlationId: string;
   size: number;
 
   constructor(sourcePath: string, manifest: Manifest) {
     this.sourcePath = sourcePath;
     this.dataPath = manifest.path;
     this.size = manifest.size;
+    this.correlationId = manifest.correlationId ?? ulid();
     for (const file of manifest.files) {
       file.path = ManifestLoader.normalize(file.path);
       this.files.set(file.path, file);
@@ -180,6 +183,7 @@ export class ManifestLoader {
       path: this.dataPath,
       size,
       files,
+      correlationId: this.correlationId,
     };
   }
   toJsonString(): string {

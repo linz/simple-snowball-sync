@@ -22,8 +22,10 @@ export const commandHash = command({
   handler: async (args) => {
     if (args.verbose) logger.level = 'trace';
     await registerSnowball(args, logger);
+
     logger.info(getVersion(), 'Hash:Start');
     const manifest = await ManifestLoader.load(args.manifest);
+    logger.info({ correlationId: manifest.correlationId }, 'Hash:Manifest');
 
     const toHash = args.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
     if (toHash.length === 0) {
@@ -36,7 +38,10 @@ export const commandHash = command({
     await hashFiles(toHash, manifest);
 
     await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
-    logger.info({ path: args.manifest, count: manifest.files.size }, 'Hash:Done');
+    logger.info(
+      { path: args.manifest, count: manifest.files.size, correlationId: manifest.correlationId },
+      'Hash:Done',
+    );
   },
 });
 
