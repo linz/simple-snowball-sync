@@ -26,12 +26,11 @@ async function getCaller(): Promise<string | undefined> {
 }
 export async function setupLogger(cmd: string, flags: { verbose: boolean }): Promise<LogType> {
   if (flags.verbose) logger.level = 'trace';
-  console.log('SetupLogger', cmd);
 
   const log = logger.child({ id: LogId });
 
-  const user = await getCaller();
+  const userId = await getCaller();
 
-  log.info({ command: { package: '@linzjs/simple-snowball-sync', cmd, ...getVersion() }, user }, 'Command:Start');
+  log.info({ command: { package: '@linzjs/simple-snowball-sync', cmd, ...getVersion() }, userId }, 'Command:Start');
   return log;
 }
