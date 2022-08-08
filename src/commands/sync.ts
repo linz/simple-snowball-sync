@@ -201,8 +201,9 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         };
         const targetUri = fsa.join(target, file.path);
 
-        state.logger.debug(
-          { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
+        const startTime = performance.now();
+        state.logger.trace(
+          { count: index, total: files.length, path: file.path, size: file.size, target: targetUri },
           'Upload:Start',
         );
         await uploadFile(client, uploadCtx);
@@ -210,6 +211,17 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         Stats.size += file.size;
         Stats.progressSize += file.size;
         state.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
+        state.logger.debug(
+          {
+            count: index,
+            total: files.length,
+            path: file.path,
+            size: file.size,
+            target: targetUri,
+            duration: msSince(startTime),
+          },
+          'Upload:Done',
+        );
       })
       .catch((err) => {
         state.logger.error({ err, path: state.manifest.file(file) }, 'Upload:Failed');
