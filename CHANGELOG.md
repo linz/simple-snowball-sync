@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/linz/simple-snowball-sync/compare/v1.3.2...v1.4.0) (2022-08-08)
+
+
+### Features
+
+* standardise the logging across all the commands ([#487](https://github.com/linz/simple-snowball-sync/issues/487)) ([21617b3](https://github.com/linz/simple-snowball-sync/commit/21617b33b782ab56e33bb543d66bf4e814c0d5fd))
+* **log:** sync logs to aws s3 if permission is enabled ([#486](https://github.com/linz/simple-snowball-sync/issues/486)) ([f91df09](https://github.com/linz/simple-snowball-sync/commit/f91df09e8ade0069912fac6efc185968602aea75))
+* **sync:** force --scan after upload completes to validate everything was uploaded ([#483](https://github.com/linz/simple-snowball-sync/issues/483)) ([c545c66](https://github.com/linz/simple-snowball-sync/commit/c545c662266400e9231bbbf2580633558987c416))
+* replace oclif with cmd-ts as oclif  ([#482](https://github.com/linz/simple-snowball-sync/issues/482)) ([829ed69](https://github.com/linz/simple-snowball-sync/commit/829ed699c0e51d4f1394910c480c4d67a805e32b))
+
+
+
 ## [1.3.2](https://github.com/linz/simple-snowball-sync/compare/v1.3.1...v1.3.2) (2022-02-02)
 
 
