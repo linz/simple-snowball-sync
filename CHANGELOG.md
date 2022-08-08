@@ -1,3 +1,12 @@
+## [1.4.2](https://github.com/linz/simple-snowball-sync/compare/v1.4.1...v1.4.2) (2022-08-08)
+
+
+### Features
+
+* track manifest write performance ([#488](https://github.com/linz/simple-snowball-sync/issues/488)) ([0631b91](https://github.com/linz/simple-snowball-sync/commit/0631b91de2be07f37881c7542154aee4c84dba87))
+
+
+
 ## [1.4.1](https://github.com/linz/simple-snowball-sync/compare/v1.4.0...v1.4.1) (2022-08-08)
 
 
