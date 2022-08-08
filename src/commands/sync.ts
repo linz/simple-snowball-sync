@@ -13,12 +13,8 @@ import { ManifestFile } from '../manifest';
 import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
 import { uploadFile } from '../upload';
-import { endpoint, target, verbose } from './common';
+import { endpoint, msSince, target, verbose } from './common';
 import { hashFiles } from './hash';
-
-function msSince(lastTick: number): number {
-  return Math.floor((performance.now() - lastTick) / 1000) * 1000;
-}
 
 const Stats = {
   /** Files uploaded over all runs */
@@ -85,6 +81,8 @@ export const commandSync = command({
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
   handler: async (args) => {
+    const startTime = performance.now();
+
     const logger = await setupLogger('sync', args);
     state.logger = logger;
 
@@ -148,7 +146,10 @@ export const commandSync = command({
       logger.warn({ count: missingHashes.length }, 'MissingHashes');
       await hashFiles(missingHashes, state.manifest, logger);
     }
-    logger.info({ sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count }, 'Sync:Done');
+    logger.info(
+      { sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count, duration: msSince(startTime) },
+      'Sync:Done',
+    );
   },
 });
 
@@ -200,8 +201,9 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         };
         const targetUri = fsa.join(target, file.path);
 
-        state.logger.debug(
-          { bigCount: index, bigTotal: files.length, path: file.path, size: file.size, target: targetUri },
+        const startTime = performance.now();
+        state.logger.trace(
+          { count: index, total: files.length, path: file.path, size: file.size, target: targetUri },
           'Upload:Start',
         );
         await uploadFile(client, uploadCtx);
@@ -209,6 +211,17 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         Stats.size += file.size;
         Stats.progressSize += file.size;
         state.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
+        state.logger.debug(
+          {
+            count: index,
+            total: files.length,
+            path: file.path,
+            size: file.size,
+            target: targetUri,
+            duration: msSince(startTime),
+          },
+          'Upload:Done',
+        );
       })
       .catch((err) => {
         state.logger.error({ err, path: state.manifest.file(file) }, 'Upload:Failed');
@@ -294,8 +307,8 @@ function watchStats(): void {
 
     const duration = msSince(lastTick);
     lastTick = performance.now();
-    const totalTime = lastTick - startTime;
-    const speed = Number((movedMb / totalTime).toFixed(2));
+    const totalTimeSeconds = (lastTick - startTime) / 1000;
+    const speed = Number((movedMb / totalTimeSeconds).toFixed(2));
 
     const percent = ((Stats.progressSize / Stats.totalSize) * 100).toFixed(3);
     state.logger.info({ count: Stats.count, percent, movedMb, speed, duration }, 'Upload:Progress');

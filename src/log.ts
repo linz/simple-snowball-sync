@@ -9,7 +9,6 @@ import { getVersion } from './version';
 const outputStream = new PassThrough();
 const LogId = ulid();
 
-if (process.stdout.isTTY) outputStream.pipe(PrettyTransform.stream());
 export const cloudWatchStream = new CloudWatchStream(outputStream, { logStream: LogId });
 const logger = pino(outputStream).child({});
 export type LogType = typeof logger;
@@ -25,7 +24,15 @@ async function getCaller(): Promise<{ userId?: string; accountId?: string } | un
   }
 }
 export async function setupLogger(cmd: string, flags: { verbose: boolean }): Promise<LogType> {
-  if (flags.verbose) logger.level = 'trace';
+  // If we are pretty logging use the prettier to restrict what is shown to the user with the rest of the logs being shipped to cloudwatch
+  if (process.stdout.isTTY) {
+    const prettyTransform = new PrettyTransform();
+    prettyTransform.pretty.level = flags.verbose ? 10 : 30;
+    outputStream.pipe(PrettyTransform.stream(process.stdout, prettyTransform));
+    logger.level = 'trace';
+  } else {
+    if (flags.verbose) logger.level = 'trace';
+  }
 
   const log = logger.child({ id: LogId });
 
