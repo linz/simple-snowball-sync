@@ -10,11 +10,11 @@ import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
 import { logger } from '../log';
 import { ManifestFile } from '../manifest';
-import { isDifferentManifestExist, ManifestLoader, ManifestFileName } from '../manifest.loader';
+import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader';
 import { registerSnowball } from '../snowball';
 import { uploadFile } from '../upload';
 import { getVersion } from '../version';
-import { verbose, endpoint, target } from './common';
+import { endpoint, target, verbose } from './common';
 import { hashFiles } from './hash';
 
 function msSince(lastTick: number): number {
@@ -126,6 +126,13 @@ export const commandSync = command({
     await uploadBigFiles(state, bigFiles, target);
     // Tar small files and upload them
     await uploadSmallFiles(state, smallFiles, target);
+
+    // Force a scan after the upload completes
+    if (state.scan === false) {
+      state.scan = true;
+      await uploadBigFiles(state, bigFiles, target);
+    }
+
     const manifestJson = Buffer.from(state.manifest.toJsonString());
     // Upload the manifest
     await fsa.write(fsa.join(target, ManifestFileName), manifestJson);
