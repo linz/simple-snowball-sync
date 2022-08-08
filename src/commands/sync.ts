@@ -211,7 +211,7 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
         state.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
       })
       .catch((err) => {
-        state.logger.error({ err, path: state.manifest.file(file) }, 'UploadFailed');
+        state.logger.error({ err, path: state.manifest.file(file) }, 'Upload:Failed');
         throw err;
       });
 
