@@ -1,5 +1,5 @@
 import o from 'ospec';
-import { ErrorList } from '../error.list';
+import { ErrorList } from '../error.list.js';
 
 o.spec('ErrorList', () => {
   o('stack should contain all the errors', async () => {

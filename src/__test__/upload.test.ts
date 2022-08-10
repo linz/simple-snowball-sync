@@ -1,6 +1,6 @@
 import o from 'ospec';
 import sinon from 'sinon';
-import { BackOff, uploadFile } from '../upload';
+import { BackOff, uploadFile } from '../upload.js';
 
 o.spec('Upload', () => {
   const sandbox: sinon.SinonSandbox = sinon.createSandbox();
