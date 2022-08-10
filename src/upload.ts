@@ -1,6 +1,6 @@
 import { S3 } from 'aws-sdk';
 import { PutObjectRequest } from 'aws-sdk/clients/s3';
-import { ErrorList } from './error.list';
+import { ErrorList } from './error.list.js';
 
 const OneMb = 1024 * 1024;
 

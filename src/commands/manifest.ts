@@ -2,10 +2,11 @@ import { fsa, FsS3 } from '@linzjs/s3fs';
 import { command, positional, string } from 'cmd-ts';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { LogType, setupLogger } from '../log';
-import { ManifestFileName, ManifestLoader } from '../manifest.loader';
-import { registerSnowball } from '../snowball';
-import { endpoint, verbose } from './common';
+import { logger, LogType } from '../log.js';
+import { ManifestFileName, ManifestLoader } from '../manifest.loader.js';
+import { registerSnowball } from '../snowball.js';
+import { Tracer } from '../tracer.js';
+import { endpoint, verbose } from './common.js';
 
 export const commandManifest = command({
   name: 'manifest',
@@ -15,28 +16,32 @@ export const commandManifest = command({
     endpoint,
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
-  handler: async (args) => {
-    const logger = await setupLogger('manifest', args);
+  handler: (args) => {
+    return Tracer.startRootSpan('command:manifest', async (span) => {
+      await registerSnowball(args, logger);
 
-    await registerSnowball(args, logger);
+      const inputPath = await parseInputPath(args.manifest, logger);
+      if (inputPath == null) return;
 
-    const inputPath = await parseInputPath(args.manifest, logger);
-    if (inputPath == null) return;
+      const pathReg = new RegExp('\\' + path.sep, 'g');
 
-    const pathReg = new RegExp('\\' + path.sep, 'g');
+      const manifestName =
+        ManifestLoader.normalize(args.manifest).replace(pathReg, '_').replace(/ /g, '_').replace(':', '') +
+        '.' +
+        ManifestFileName;
 
-    const manifestName =
-      ManifestLoader.normalize(args.manifest).replace(pathReg, '_').replace(/ /g, '_').replace(':', '') +
-      '.' +
-      ManifestFileName;
+      const manifest = await ManifestLoader.create(manifestName, inputPath, logger);
 
-    const manifest = await ManifestLoader.create(manifestName, inputPath, logger);
+      await fsa.write(manifestName, Buffer.from((await manifest).toJsonString()));
+      logger.info(
+        { path: manifestName, count: manifest.files.size, correlationId: manifest.correlationId },
+        'Manifest:Created',
+      );
 
-    await fsa.write(manifestName, Buffer.from((await manifest).toJsonString()));
-    logger.info(
-      { path: manifestName, count: manifest.files.size, correlationId: manifest.correlationId },
-      'Manifest:Created',
-    );
+      span.setAttribute('fileSize', manifest.size);
+      span.setAttribute('fileCount', manifest.files.size);
+      span.setAttribute('correlationId', manifest.correlationId);
+    });
   },
 });
 

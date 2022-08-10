@@ -8,13 +8,14 @@ import { performance } from 'perf_hooks';
 import { PassThrough } from 'stream';
 import * as tar from 'tar-stream';
 import { createGzip } from 'zlib';
-import { LogType, setupLogger } from '../log';
-import { ManifestFile } from '../manifest';
-import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader';
-import { registerSnowball } from '../snowball';
-import { uploadFile } from '../upload';
-import { endpoint, msSince, target, verbose } from './common';
-import { hashFiles } from './hash';
+import { logger, LogType } from '../log.js';
+import { ManifestFile } from '../manifest.js';
+import { isDifferentManifestExist, ManifestFileName, ManifestLoader } from '../manifest.loader.js';
+import { registerSnowball } from '../snowball.js';
+import { ot, Tracer } from '../tracer.js';
+import { uploadFile } from '../upload.js';
+import { endpoint, msSince, target, verbose } from './common.js';
+import { hashFiles } from './hash.js';
 
 const Stats = {
   /** Files uploaded over all runs */
@@ -80,76 +81,79 @@ export const commandSync = command({
     }),
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
-  handler: async (args) => {
-    const startTime = performance.now();
+  handler: (args) => {
+    return Tracer.startRootSpan('command:sync', async (span) => {
+      span.setAttribute('target', args.target);
+      span.setAttribute('concurrency', args.concurrency);
+      const startTime = performance.now();
 
-    const logger = await setupLogger('sync', args);
-    state.logger = logger;
+      state.logger = logger;
 
-    const target = args.target;
+      const target = args.target;
 
-    FsS3.parse(target); // Asserts target is a s3 uri
-    if (target == null) throw new Error('--target must be in the format s3://bucket/prefix');
-    client = await registerSnowball(args, logger);
+      FsS3.parse(target); // Asserts target is a s3 uri
+      if (target == null) throw new Error('--target must be in the format s3://bucket/prefix');
+      client = await registerSnowball(args, logger);
 
-    logger.info({ target, concurrency: args.concurrency, endpoint: args.endpoint }, 'Sync:Start');
+      logger.info({ target, concurrency: args.concurrency, endpoint: args.endpoint }, 'Sync:Start');
 
-    // Only use tar compression if uploading to a snowball
-    if (args.endpoint == null) args.filter = -1;
+      // Only use tar compression if uploading to a snowball
+      if (args.endpoint == null) args.filter = -1;
 
-    if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
+      if (!args.manifest.endsWith('.json')) throw new Error('Manifest must be a json file');
 
-    state.manifest = await ManifestLoader.load(args.manifest, logger);
-    if (await isDifferentManifestExist(state.manifest, target, logger)) {
-      throw new Error('The existing manifest in the target directory contains different files.');
-    }
-    logger.info({ correlationId: state.manifest.correlationId }, 'Sync:Manifest');
+      state.manifest = await ManifestLoader.load(args.manifest, logger);
+      if (await isDifferentManifestExist(state.manifest, target, logger)) {
+        throw new Error('The existing manifest in the target directory contains different files.');
+      }
+      logger.info({ correlationId: state.manifest.correlationId }, 'Sync:Manifest');
 
-    state.Q = pLimit(args.concurrency);
-    state.concurrency = args.concurrency;
-    state.scan = args.scan;
+      state.Q = pLimit(args.concurrency);
+      state.concurrency = args.concurrency;
+      state.scan = args.scan;
 
-    Stats.totalFiles = state.manifest.files.size;
-    Stats.totalSize = state.manifest.size;
+      Stats.totalFiles = state.manifest.files.size;
+      Stats.totalSize = state.manifest.size;
 
-    /** Filter files down to MB size */
-    const filterSize = args.filter * 1024 * 1024;
-    const smallFiles: ManifestFile[] = [];
-    const bigFiles: ManifestFile[] = [];
-    for (const file of state.manifest.files.values()) {
-      if (file.size > filterSize) bigFiles.push(file);
-      else smallFiles.push(file);
-    }
-    logger.info({ files: bigFiles.length, smallFiles: smallFiles.length, filterMb: args.filter }, 'Sync:FilterFiles');
+      /** Filter files down to MB size */
+      const filterSize = args.filter * 1024 * 1024;
+      const smallFiles: ManifestFile[] = [];
+      const bigFiles: ManifestFile[] = [];
+      for (const file of state.manifest.files.values()) {
+        if (file.size > filterSize) bigFiles.push(file);
+        else smallFiles.push(file);
+      }
+      logger.info({ files: bigFiles.length, smallFiles: smallFiles.length, filterMb: args.filter }, 'Sync:FilterFiles');
 
-    watchStats();
+      watchStats();
 
-    // Upload larger files and Tar small files and upload them
-    if (bigFiles.length > 0) await uploadBigFiles(state, bigFiles, target);
-    if (smallFiles.length > 0) await uploadSmallFiles(state, smallFiles, target);
-
-    // Force a scan after the upload completes
-    if (state.scan === false) {
-      state.scan = true;
+      // Upload larger files and Tar small files and upload them
       if (bigFiles.length > 0) await uploadBigFiles(state, bigFiles, target);
       if (smallFiles.length > 0) await uploadSmallFiles(state, smallFiles, target);
-    }
 
-    const manifestJson = Buffer.from(state.manifest.toJsonString());
-    // Upload the manifest
-    await fsa.write(fsa.join(target, ManifestFileName), manifestJson);
-    await fsa.write(args.manifest, manifestJson);
+      // Force a scan after the upload completes
+      if (state.scan === false) {
+        state.scan = true;
+        if (bigFiles.length > 0) await uploadBigFiles(state, bigFiles, target);
+        if (smallFiles.length > 0) await uploadSmallFiles(state, smallFiles, target);
+      }
 
-    // Force rehash any file that is missing a hash
-    const missingHashes = state.manifest.filter((f) => f.hash == null);
-    if (missingHashes.length > 0) {
-      logger.warn({ count: missingHashes.length }, 'MissingHashes');
-      await hashFiles(missingHashes, state.manifest, logger);
-    }
-    logger.info(
-      { sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count, duration: msSince(startTime) },
-      'Sync:Done',
-    );
+      const manifestJson = Buffer.from(state.manifest.toJsonString());
+      // Upload the manifest
+      await fsa.write(fsa.join(target, ManifestFileName), manifestJson);
+      await fsa.write(args.manifest, manifestJson);
+
+      // Force rehash any file that is missing a hash
+      const missingHashes = state.manifest.filter((f) => f.hash == null);
+      if (missingHashes.length > 0) {
+        logger.warn({ count: missingHashes.length }, 'MissingHashes');
+        await hashFiles(missingHashes, state.manifest, logger);
+      }
+      logger.info(
+        { sizeMb: (Stats.size / 1024 / 1024).toFixed(2), count: Stats.count, duration: msSince(startTime) },
+        'Sync:Done',
+      );
+    });
   },
 });
 
@@ -190,35 +194,45 @@ async function uploadBigFiles(state: SyncState, files: ManifestFile[], target: s
     const file = files[index];
     const p = state
       .Q(async () => {
-        // Hash the file while uploading
-        const hash = createHash('sha256');
-        const fileStream = fsa.readStream(state.manifest.file(file));
-        fileStream.on('data', (chunk) => hash.update(chunk));
+        return Tracer.tracer.startActiveSpan('sync:upload:' + file.path, {}, ot.context.active(), async (span) => {
+          // Hash the file while uploading
+          const hash = createHash('sha256');
+          const fileStream = fsa.readStream(state.manifest.file(file));
+          fileStream.on('data', (chunk) => hash.update(chunk));
 
-        const uploadCtx = { Bucket: bucket, Key: path.join(key ?? '', file.path), Body: fileStream };
-        const targetUri = fsa.join(target, file.path);
+          const uploadCtx = { Bucket: bucket, Key: path.join(key ?? '', file.path), Body: fileStream };
+          const targetUri = fsa.join(target, file.path);
 
-        const startTime = performance.now();
-        state.logger.trace(
-          { index, total: files.length, path: file.path, size: file.size, target: targetUri },
-          'Upload:File:Start',
-        );
-        await uploadFile(client, uploadCtx);
-        Stats.count++;
-        Stats.size += file.size;
-        Stats.progressSize += file.size;
-        state.manifest.setHash(file.path, 'sha256-' + hash.digest('base64'));
-        state.logger.debug(
-          {
-            index,
-            total: files.length,
-            path: file.path,
-            size: file.size,
-            target: targetUri,
-            duration: msSince(startTime),
-          },
-          'Upload:File:Done',
-        );
+          const startTime = performance.now();
+          state.logger.trace(
+            { index, total: files.length, path: file.path, size: file.size, target: targetUri },
+            'Upload:File:Start',
+          );
+          await uploadFile(client, uploadCtx);
+          Stats.count++;
+          Stats.size += file.size;
+          Stats.progressSize += file.size;
+          const digest = 'sha256-' + hash.digest('base64');
+          state.manifest.setHash(file.path, digest);
+          state.logger.debug(
+            {
+              index,
+              total: files.length,
+              path: file.path,
+              size: file.size,
+              hash,
+              target: targetUri,
+              duration: msSince(startTime),
+            },
+            'Upload:File:Done',
+          );
+          span.setAttribute('index', index);
+          span.setAttribute('path', file.path);
+          span.setAttribute('size', file.size);
+          span.setAttribute('hash', digest);
+          span.setAttribute('target', targetUri);
+          span.end();
+        });
       })
       .catch((err) => {
         state.logger.error({ err, path: file.path }, 'Upload:File:Failed');
