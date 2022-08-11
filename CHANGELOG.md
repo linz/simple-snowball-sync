@@ -7,6 +7,13 @@
 
 
 
+## [1.5.0](https://github.com/linz/simple-snowball-sync/compare/v1.4.2...v1.5.0) (2022-08-11)
+
+
+### Features
+
+* limit manifest writes to one at a time. ([#493](https://github.com/linz/simple-snowball-sync/issues/493)) ([101737f](https://github.com/linz/simple-snowball-sync/commit/101737f148f524611263a4bf44868b630a08c83d))
+
 ## [1.4.1](https://github.com/linz/simple-snowball-sync/compare/v1.4.0...v1.4.1) (2022-08-08)
 
 
@@ -106,6 +113,3 @@
 
 
 ## [1.0.1](https://github.com/linz/simple-snowball-sync/compare/v1.0.0...v1.0.1) (2021-04-19)
-
-
-
