@@ -14,7 +14,6 @@ jobs:
         id: release
         with:
           release-type: node
-          package-name: "@linz/lol-auth-js"
           token: ${{ secrets.GITHUB_TOKEN }}
 
   publish-release:
