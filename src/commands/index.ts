@@ -1,9 +1,9 @@
 import { subcommands } from 'cmd-ts';
-import { getVersion } from '../version';
-import { commandHash } from './hash';
-import { commandManifest } from './manifest';
-import { commandSync } from './sync';
-import { commandValidate } from './validate';
+import { getVersion } from '../version.js';
+import { commandHash } from './hash.js';
+import { commandManifest } from './manifest.js';
+import { commandSync } from './sync.js';
+import { commandValidate } from './validate.js';
 
 export const cmd = subcommands({
   name: 'sss',

@@ -2,9 +2,12 @@ import { fsa } from '@linzjs/s3fs';
 import { promises as fs } from 'fs';
 import { performance } from 'perf_hooks';
 import { ulid } from 'ulid';
-import { msSince } from './commands/common';
-import { LogType } from './log';
-import { Manifest, ManifestFile } from './manifest';
+import { msSince } from './commands/common.js';
+import { LogType } from './log.js';
+import { Manifest, ManifestFile } from './manifest.js';
+import { ot, Tracer } from './tracer.js';
+
+const ManifestFlushTimeoutSeconds = 15_000;
 
 const BackupExtension = '.1';
 export const ManifestFileName = 'manifest.json';
@@ -88,14 +91,25 @@ export class ManifestLoader {
   }
 
   static async load(fileName: string, log: LogType): Promise<ManifestLoader> {
-    if (!isManifestPath(fileName)) throw new Error('Invalid manifest path ' + fileName);
-    const buf = await fsa.read(fileName);
+    const span = Tracer.startSpan('manifest:load');
+    span.setAttribute('fileName', fileName);
     try {
-      const manifest: Manifest = JSON.parse(buf.toString());
-      return new ManifestLoader(fileName, manifest, log);
-    } catch (e) {
-      if (fileName.endsWith(BackupExtension)) throw e;
-      return this.load(fileName + BackupExtension, log);
+      if (!isManifestPath(fileName)) throw new Error('Invalid manifest path ' + fileName);
+      const buf = await fsa.read(fileName);
+      try {
+        const manifest: Manifest = JSON.parse(buf.toString());
+        const manifestLoader = new ManifestLoader(fileName, manifest, log);
+        span.setAttribute('correlationId', manifestLoader.correlationId);
+        return manifestLoader;
+      } catch (e) {
+        if (fileName.endsWith(BackupExtension)) throw e;
+        return this.load(fileName + BackupExtension, log);
+      }
+    } catch (e: any) {
+      span.recordException(e);
+      throw e;
+    } finally {
+      span.end();
     }
   }
 
@@ -118,16 +132,20 @@ export class ManifestLoader {
   }
 
   static async create(outputPath: string, inputPath: string, log: LogType): Promise<ManifestLoader> {
-    const manifest: Manifest = { path: inputPath, size: 0, files: [] };
-    for await (const rec of this.list(inputPath)) {
-      manifest.size += rec.size;
-      manifest.files.push(rec);
-      if (manifest.files.length % 5_000 === 0) {
-        log.info({ count: manifest.files.length, path: rec.path }, 'Manifest:Progress');
+    return await Tracer.tracer.startActiveSpan('manifest:create', {}, ot.context.active(), async (span) => {
+      const manifest: Manifest = { path: inputPath, size: 0, files: [] };
+      for await (const rec of this.list(inputPath)) {
+        manifest.size += rec.size;
+        manifest.files.push(rec);
+        if (manifest.files.length % 5_000 === 0) {
+          log.info({ count: manifest.files.length, path: rec.path }, 'Manifest:Progress');
+        }
       }
-    }
-
-    return new ManifestLoader(outputPath, manifest, log);
+      span.setAttribute('fileSize', manifest.size);
+      span.setAttribute('fileCount', manifest.files.length);
+      span.end();
+      return new ManifestLoader(outputPath, manifest, log);
+    });
   }
 
   setHash(path: string, hash: string): void {
@@ -151,41 +169,67 @@ export class ManifestLoader {
 
   renameFailures: Error[] = [];
   renameFailuresMax = 3;
+
   _dirtyTimeout: NodeJS.Timer | null = null;
   dirty(): void {
     if (this._dirtyTimeout != null) return;
-    this._dirtyTimeout = setTimeout(async () => {
-      this._dirtyTimeout = null;
-
-      const metrics: Record<string, number> = {};
-      const startTime = performance.now();
-      const outputData = JSON.stringify(this.toJson(), null, 2);
-      metrics['manifest:json'] = msSince(startTime);
-
-      const writeTime = performance.now();
-      await fs.writeFile(this.sourcePath + BackupExtension, outputData);
-      metrics['manifest:write'] = msSince(writeTime);
-      try {
-        const renameTime = performance.now();
-        await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
-        metrics['manifest:rename'] = msSince(renameTime);
-
-        this.renameFailures = [];
-      } catch (err) {
-        this.renameFailures.push(err as Error);
-        this.logger.info(
-          { err, count: this.renameFailures.length, metrics, duration: msSince(startTime) },
-          'Manifest:Update:Failed',
-        );
-
-        if (this.renameFailures.length > this.renameFailuresMax) throw err;
-        return;
-      }
-
-      this.logger.info({ metrics, duration: msSince(startTime) }, 'Manifest:Update');
-    }, 15_000);
+    this._dirtyTimeout = setTimeout(this.flush, ManifestFlushTimeoutSeconds);
     this._dirtyTimeout.unref();
   }
+
+  /** Limit tthe flush to happen one at a time */
+  _flushPromise: Promise<void> | null;
+  /** Number of times flush has been called */
+  _flushCount = 0;
+
+  flush = (): void => {
+    if (this._dirtyTimeout) clearTimeout(this._dirtyTimeout);
+    this._dirtyTimeout = null;
+    const flushId = this._flushCount++;
+    this.logger.trace({ flushId }, 'Manifest:Update:Schedule');
+    const scheduleTime = performance.now();
+
+    if (this._flushPromise == null) this._flushPromise = Promise.resolve();
+    this._flushPromise = this._flushPromise
+      .then(async () => {
+        const span = Tracer.startSpan('manifest:write:' + flushId);
+        span.setAttribute('flushId', flushId);
+        const metrics: Record<string, number> = {};
+        metrics['manifest:schedule'] = msSince(scheduleTime);
+
+        const startTime = performance.now();
+        const outputData = JSON.stringify(this.toJson(), null, 2);
+        metrics['manifest:json'] = msSince(startTime);
+
+        const writeTime = performance.now();
+        await fs.writeFile(this.sourcePath + BackupExtension, outputData);
+        metrics['manifest:write'] = msSince(writeTime);
+        try {
+          const renameTime = performance.now();
+          await fs.rename(this.sourcePath + BackupExtension, this.sourcePath);
+          metrics['manifest:rename'] = msSince(renameTime);
+
+          this.renameFailures = [];
+        } catch (err) {
+          this.renameFailures.push(err as Error);
+          this.logger.info(
+            { flushId, err, count: this.renameFailures.length, metrics, duration: msSince(startTime) },
+            'Manifest:Update:Failed',
+          );
+          span.setAttributes(metrics);
+          span.recordException(err as Error);
+          span.end();
+
+          if (this.renameFailures.length > this.renameFailuresMax) throw err;
+          return;
+        }
+
+        span.setAttributes(metrics);
+        span.end();
+        this.logger.info({ flushId, metrics, duration: msSince(startTime) }, 'Manifest:Update');
+      })
+      .catch((err) => this.logger.error({ flushId, err }, 'Manifest:Write:Failed'));
+  };
 
   toJson(): Manifest {
     const files = [];

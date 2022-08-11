@@ -2,12 +2,13 @@ import { fsa } from '@linzjs/s3fs';
 import { boolean, command, flag, positional, string } from 'cmd-ts';
 import pLimit from 'p-limit';
 import { performance } from 'perf_hooks';
-import { hashFile } from '../hash';
-import { LogType, setupLogger } from '../log';
-import { ManifestFile } from '../manifest';
-import { ManifestLoader } from '../manifest.loader';
-import { registerSnowball } from '../snowball';
-import { endpoint, verbose } from './common';
+import { hashFile } from '../hash.js';
+import { logger, LogType } from '../log.js';
+import { ManifestFile } from '../manifest.js';
+import { ManifestLoader } from '../manifest.loader.js';
+import { registerSnowball } from '../snowball.js';
+import { Tracer } from '../tracer.js';
+import { endpoint, verbose } from './common.js';
 
 export const commandHash = command({
   name: 'hash',
@@ -18,27 +19,34 @@ export const commandHash = command({
     force: flag({ long: 'force', description: 'Force rehash all files', type: boolean }),
     manifest: positional({ type: string, displayName: 'MANIFEST' }),
   },
-  handler: async (args) => {
-    const logger = await setupLogger('hash', args);
-    await registerSnowball(args, logger);
-    const manifest = await ManifestLoader.load(args.manifest, logger);
-    logger.info({ correlationId: manifest.correlationId }, 'Hash:Manifest');
+  handler: (args) => {
+    return Tracer.startRootSpan('command:hash', async (span) => {
+      await registerSnowball(args, logger);
+      const manifest = await ManifestLoader.load(args.manifest, logger);
+      logger.info({ correlationId: manifest.correlationId }, 'Hash:Manifest');
 
-    const toHash = args.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
-    if (toHash.length === 0) {
+      const toHash = args.force ? [...manifest.files.values()] : manifest.filter((f) => f.hash == null);
+      if (toHash.length === 0) {
+        await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
+        logger.info({ path: args.manifest, total: manifest.files.size }, 'Hash:Done');
+        return;
+      }
+      logger.debug({ total: toHash.length }, 'Hash:File');
+
+      await hashFiles(toHash, manifest, logger);
+
       await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
-      logger.info({ path: args.manifest, total: manifest.files.size }, 'Hash:Done');
-      return;
-    }
-    logger.debug({ total: toHash.length }, 'Hash:File');
+      logger.info(
+        { path: args.manifest, count: manifest.files.size, correlationId: manifest.correlationId },
+        'Hash:Done',
+      );
 
-    await hashFiles(toHash, manifest, logger);
-
-    await fsa.write(args.manifest, Buffer.from(manifest.toJsonString()));
-    logger.info(
-      { path: args.manifest, count: manifest.files.size, correlationId: manifest.correlationId },
-      'Hash:Done',
-    );
+      span.setAttribute('hashCount', toHash.length);
+      span.setAttribute('fileSize', manifest.size);
+      span.setAttribute('fileCount', manifest.files.size);
+      span.setAttribute('correlationId', manifest.correlationId);
+      span.end();
+    });
   },
 });
 

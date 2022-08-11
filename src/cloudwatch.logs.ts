@@ -1,4 +1,4 @@
-import { CloudWatchLogs } from 'aws-sdk';
+import CloudWatchLogs from 'aws-sdk/clients/cloudwatchlogs.js';
 import { createInterface, Interface } from 'readline';
 import { Readable } from 'stream';
 
@@ -72,6 +72,7 @@ export class CloudWatchStream {
   _nextToken: string | undefined;
 
   private putLogs = async (): Promise<void> => {
+    console.log('putLogs');
     await this.init();
     const logs = this.logs;
     if (logs.length === 0) return;
@@ -108,6 +109,7 @@ export class CloudWatchStream {
       } else {
         this.fail(e);
       }
+      console.log('putLogs:Done');
     }
   };
 
@@ -118,4 +120,11 @@ export class CloudWatchStream {
     this._flush = this._flush.then(this.putLogs);
     return this._flush;
   };
+
+  async shutdown(): Promise<void> {
+    if (this.sendTimeout) clearTimeout(this.sendTimeout);
+    this.sendTimeout = null;
+    this.rl.off('line', this.process);
+    await this.flush();
+  }
 }

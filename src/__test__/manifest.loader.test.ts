@@ -1,6 +1,6 @@
 import o from 'ospec';
-import { Manifest } from '../manifest';
-import { isManifestsDifferent, ManifestLoader } from '../manifest.loader';
+import { Manifest } from '../manifest.js';
+import { isManifestsDifferent, ManifestLoader } from '../manifest.loader.js';
 
 o.spec('ManifestLoader', () => {
   const manifestA = createManifest();

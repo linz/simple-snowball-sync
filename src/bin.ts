@@ -1,5 +1,5 @@
 import { run } from 'cmd-ts';
-import { cmd } from './commands/index';
-import { cloudWatchStream } from './log';
+import { cmd } from './commands/index.js';
+import { Tracer } from './tracer.js';
 
-run(cmd, process.argv.slice(2)).finally(() => cloudWatchStream.flush());
+Tracer.run(() => run(cmd, process.argv.slice(2)));

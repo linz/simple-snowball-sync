@@ -1,18 +1,21 @@
 import { fsa, FsS3 } from '@linzjs/s3fs';
-import S3 from 'aws-sdk/clients/s3';
-import { LogType } from './log';
+import S3 from 'aws-sdk/clients/s3.js';
+import { LogType } from './log.js';
 import * as path from 'path';
 import * as os from 'os';
 import * as AWS from 'aws-sdk';
+import { Tracer } from './tracer.js';
 
 FsS3.MaxListCount = 1_000; // Some folders are very large
 
-export async function registerSnowball(
-  flags: { target?: string; endpoint?: string; verbose?: boolean },
-  log: LogType,
-): Promise<S3> {
+export async function registerSnowball(flags: { target?: string; endpoint?: string }, log: LogType): Promise<S3> {
   let endpoint = flags.endpoint;
   if (endpoint != null && !endpoint.startsWith('http')) endpoint = 'http://' + endpoint + ':8080';
+
+  if (Tracer.rootSpan) {
+    if (endpoint) Tracer.rootSpan.setAttribute('endpoint', endpoint);
+    if (flags.target) Tracer.rootSpan.setAttribute('target', flags.target);
+  }
 
   const client = endpoint ? new S3({ endpoint, s3ForcePathStyle: true, computeChecksums: true }) : new S3();
   if (flags.target) {
@@ -22,7 +25,15 @@ export async function registerSnowball(
     fsa.register('s3://', new FsS3(client));
   }
 
-  await registerBuckets(log);
+  const span = Tracer.startSpan('register:buckets');
+  try {
+    await registerBuckets(log);
+  } catch (e: any) {
+    span.recordException(e);
+    throw e;
+  } finally {
+    span.end();
+  }
   return client;
 }
 
