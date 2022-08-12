@@ -24,7 +24,7 @@
     "esbuild": "^0.14.53",
     "ospec": "^4.0.1",
     "p-limit": "^3.1.0",
-    "pino": "^7.6.5",
+    "pino": "^8.4.1",
     "pretty-json-log": "^1.1.0",
     "sinon": "^11.1.1",
     "tar-stream": "^2.2.0",
